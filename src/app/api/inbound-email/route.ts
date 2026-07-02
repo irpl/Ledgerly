@@ -1,40 +1,25 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { prisma } from "@/lib/prisma";
-import { applyParserRules, htmlToText } from "@/lib/email-parser";
+import { ingestInboundEmail, rateLimited, secretMatches } from "@/lib/inbound-email";
+import { parseRawMime } from "@/lib/email-parser";
 
 const inboundEmailInput = z.object({
-  from: z.string().trim().min(1).max(500),
-  subject: z.string().trim().max(1000).default(""),
+  from: z.string().trim().max(500).optional(),
+  subject: z.string().trim().max(1000).optional(),
   text: z.string().max(200_000).nullish(),
   html: z.string().max(500_000).nullish(),
+  // Raw RFC-822/MIME message (e.g. from the Cloudflare Email Worker). When
+  // present it takes precedence: we parse clean fields out of it.
+  raw: z.string().max(5_000_000).nullish(),
   receivedAt: z.string().nullish(),
 });
 
-// Simple fixed-window rate limit (single-instance deploy).
-const WINDOW_MS = 60_000;
-const MAX_PER_WINDOW = 30;
-let windowStart = 0;
-let windowCount = 0;
-
-function rateLimited(): boolean {
-  const now = Date.now();
-  if (now - windowStart > WINDOW_MS) {
-    windowStart = now;
-    windowCount = 0;
-  }
-  windowCount++;
-  return windowCount > MAX_PER_WINDOW;
-}
-
 function authorized(req: NextRequest): boolean {
-  const secret = process.env.INBOUND_EMAIL_SECRET;
-  if (!secret) return false;
   const header =
     req.headers.get("x-inbound-email-secret") ??
     req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ??
     "";
-  return header === secret;
+  return secretMatches(header);
 }
 
 export async function POST(req: NextRequest) {
@@ -54,18 +39,23 @@ export async function POST(req: NextRequest) {
   }
   const data = parsed.data;
 
-  const body = data.text?.trim() || (data.html ? htmlToText(data.html) : "");
-  const receivedAt = data.receivedAt ? new Date(data.receivedAt) : new Date();
+  // Prefer fields recovered from the raw MIME; fall back to any provided
+  // directly (a plain JSON caller sends from/subject/text/html and no raw).
+  const mime = data.raw ? await parseRawMime(data.raw) : null;
+  const from = (mime?.from || data.from || "").trim();
+  if (!from) {
+    return NextResponse.json(
+      { error: "Invalid input", issues: [{ path: ["from"], message: "Required" }] },
+      { status: 400 }
+    );
+  }
 
-  const email = await prisma.rawEmail.create({
-    data: {
-      fromAddress: data.from,
-      subject: data.subject,
-      body,
-      receivedAt: Number.isNaN(receivedAt.getTime()) ? new Date() : receivedAt,
-    },
+  const { id, outcome } = await ingestInboundEmail({
+    from,
+    subject: mime?.subject || data.subject || "",
+    text: mime?.text ?? data.text,
+    html: mime?.html ?? data.html,
+    receivedAt: data.receivedAt,
   });
-
-  const outcome = await applyParserRules(email);
-  return NextResponse.json({ id: email.id, outcome }, { status: 201 });
+  return NextResponse.json({ id, outcome }, { status: 201 });
 }

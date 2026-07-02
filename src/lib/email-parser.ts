@@ -1,8 +1,32 @@
 // Server-only: parse bank-alert emails into pending-review transactions (§5.5).
+import PostalMime from "postal-mime";
 import { prisma } from "@/lib/prisma";
 import type { Prisma, RawEmail } from "@/generated/prisma/client";
 import { upsertVendor } from "@/lib/transactions";
 import { majorToMinor } from "@/lib/money";
+
+export type ParsedMime = {
+  from: string;
+  subject: string;
+  text: string | null;
+  html: string | null;
+};
+
+/**
+ * Parse a raw RFC-822 / MIME message into clean fields. Used when a webhook
+ * forwards the raw email (e.g. the Cloudflare Email Worker) instead of an
+ * already-extracted body — decodes quoted-printable/base64 parts and drops
+ * the envelope headers that would otherwise pollute rule matching.
+ */
+export async function parseRawMime(raw: string): Promise<ParsedMime> {
+  const email = await PostalMime.parse(raw);
+  return {
+    from: email.from?.address ?? email.from?.name ?? "",
+    subject: email.subject ?? "",
+    text: email.text ?? null,
+    html: email.html ?? null,
+  };
+}
 
 /** Crude HTML → text for alert emails that arrive without a text part. */
 export function htmlToText(html: string): string {

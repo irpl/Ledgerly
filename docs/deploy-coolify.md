@@ -33,9 +33,12 @@ Assign your domain in Coolify → automatic Let's Encrypt. Force HTTPS.
 
 ## 5. Email ingestion
 
-See `docs/email-ingestion.md` — enable Cloudflare Email Routing, deploy the
-Email Worker pointing at `${APP_BASE_URL}/api/inbound-email` with
-`INBOUND_EMAIL_SECRET`, and forward bank alerts to the catch address.
+See `docs/email-ingestion.md` — Cloudflare Email Routing (Option A, Worker →
+`${APP_BASE_URL}/api/inbound-email`), SendGrid Inbound Parse (Option B →
+`…/api/inbound-email/sendgrid?key=…`), or Postmark inbound (Option C →
+`…/api/inbound-email/postmark?key=…`; works with any DNS host, or with no DNS
+at all via Postmark's hosted address), then forward bank alerts to the catch
+address.
 
 ## 6. Backups
 

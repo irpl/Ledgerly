@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseAmount, parseEmailDate, htmlToText } from "@/lib/email-parser";
+import { parseAmount, parseEmailDate, htmlToText, parseRawMime } from "@/lib/email-parser";
 
 describe("parseAmount", () => {
   it("strips currency symbols and thousands separators", () => {
@@ -52,5 +52,53 @@ describe("htmlToText", () => {
     expect(text).not.toContain("<");
     expect(text).not.toContain("alert");
     expect(text).not.toContain("color:red");
+  });
+});
+
+describe("parseRawMime", () => {
+  const CRLF = "\r\n";
+
+  it("extracts clean text/from/subject from a multipart quoted-printable message", async () => {
+    const raw = [
+      "From: Bank Alerts <alerts@mybank.com>",
+      "To: bank@philliplogan.com",
+      "Subject: Transaction Alert",
+      "MIME-Version: 1.0",
+      'Content-Type: multipart/alternative; boundary="BOUND"',
+      "",
+      "--BOUND",
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: quoted-printable",
+      "",
+      "Your account was debited JMD 4,512.35 at HI-LO=20PORTMORE on 02-Jul-2026.",
+      "",
+      "--BOUND--",
+      "",
+    ].join(CRLF);
+
+    const mime = await parseRawMime(raw);
+    expect(mime.from).toBe("alerts@mybank.com");
+    expect(mime.subject).toBe("Transaction Alert");
+    // Quoted-printable "=20" decoded back to a space; no envelope headers leak.
+    expect(mime.text).toContain("debited JMD 4,512.35 at HI-LO PORTMORE");
+    expect(mime.text).not.toContain("Content-Transfer-Encoding");
+  });
+
+  it("recovers a body from an HTML-only message", async () => {
+    const raw = [
+      "From: alerts@mybank.com",
+      "Subject: Alert",
+      "MIME-Version: 1.0",
+      "Content-Type: text/html; charset=UTF-8",
+      "",
+      "<p>Debited <b>JMD 500.00</b> at SHOP</p>",
+      "",
+    ].join(CRLF);
+
+    const mime = await parseRawMime(raw);
+    expect(mime.from).toBe("alerts@mybank.com");
+    expect(mime.html).toContain("JMD 500.00");
+    // htmlToText downstream turns this into a clean body.
+    expect(htmlToText(mime.html ?? "")).toContain("JMD 500.00");
   });
 });
