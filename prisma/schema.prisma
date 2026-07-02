@@ -1,0 +1,258 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------- Auth ----------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// ---------- Accounts ----------
+
+enum AccountType {
+  checking
+  savings
+  cash
+  credit_card
+  loan
+  investment
+  pension
+  ewallet
+  other
+}
+
+model Account {
+  id             String       @id @default(cuid())
+  name           String
+  type           AccountType
+  currency       String       @default("JMD")
+  // Money is stored as signed integer minor units (cents).
+  openingBalance BigInt       @default(0)
+  currentBalance BigInt       @default(0)
+  creditLimit    BigInt?
+  // Planned monthly spend/payment for liability accounts (§5.7 table).
+  monthlyBudget  BigInt?
+  color          String?
+  icon           String?
+  archived       Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  loanDetails  LoanDetails?
+  transactions Transaction[]
+  budgetLines  BudgetLine[]
+  parserRules  ParserRule[]
+}
+
+enum LoanKind {
+  mortgage
+  auto
+  bank
+  personal
+  other
+}
+
+model LoanDetails {
+  accountId         String    @id
+  account           Account   @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  loanKind          LoanKind
+  originalPrincipal BigInt
+  interestRate      Decimal   @db.Decimal(6, 3)
+  termMonths        Int
+  startDate         DateTime
+  monthlyPayment    BigInt
+  monthlyBudget     BigInt?
+  lender            String?
+  nextPaymentDate   DateTime?
+}
+
+// ---------- FX (only used when the optional combined view is enabled) ----------
+
+enum FxSource {
+  auto
+  manual
+}
+
+model FxRate {
+  id           String   @id @default(cuid())
+  fromCurrency String
+  toCurrency   String
+  rate         Decimal  @db.Decimal(14, 6)
+  asOf         DateTime @db.Date
+  source       FxSource @default(manual)
+
+  @@unique([fromCurrency, toCurrency, asOf])
+}
+
+// ---------- Categories & vendors ----------
+
+enum CategoryKind {
+  expense
+  income
+  both
+}
+
+model Category {
+  id        String       @id @default(cuid())
+  name      String
+  kind      CategoryKind
+  parentId  String?
+  parent    Category?    @relation("CategoryTree", fields: [parentId], references: [id], onDelete: SetNull)
+  children  Category[]   @relation("CategoryTree")
+  color     String?
+  icon      String?
+  isDefault Boolean      @default(false)
+
+  transactions  Transaction[]
+  budgetLines   BudgetLine[]
+  vendors       Vendor[]
+  periodActuals BudgetPeriodActual[]
+
+  @@unique([name, kind])
+}
+
+model Vendor {
+  id                String    @id @default(cuid())
+  name              String
+  nameNormalized    String    @unique // lowercased for case-insensitive uniqueness
+  defaultCategoryId String?
+  defaultCategory   Category? @relation(fields: [defaultCategoryId], references: [id], onDelete: SetNull)
+  usageCount        Int       @default(0)
+  lastUsedAt        DateTime?
+
+  transactions Transaction[]
+}
+
+// ---------- Transactions ----------
+
+enum TransactionSource {
+  manual
+  email
+}
+
+enum TransactionStatus {
+  confirmed
+  pending_review
+}
+
+model Transaction {
+  id              String            @id @default(cuid())
+  accountId       String
+  account         Account           @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  amount          BigInt // signed: out is negative, in is positive
+  occurredAt      DateTime
+  categoryId      String?
+  category        Category?         @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  vendorId        String?
+  vendor          Vendor?           @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  description     String?
+  notes           String?
+  source          TransactionSource @default(manual)
+  status          TransactionStatus @default(confirmed)
+  rawEmailId      String?           @unique
+  rawEmail        RawEmail?         @relation(fields: [rawEmailId], references: [id], onDelete: SetNull)
+  transferGroupId String?
+  createdAt       DateTime          @default(now())
+
+  @@index([accountId, occurredAt])
+  @@index([transferGroupId])
+  @@index([status])
+}
+
+// ---------- Budgeting ----------
+
+enum BudgetFrequency {
+  weekly
+  biweekly
+  monthly
+  bimonthly
+  quarterly
+  semiannual
+  annual
+}
+
+enum PaymentMethod {
+  cash
+  credit
+}
+
+model BudgetLine {
+  id                String          @id @default(cuid())
+  name              String
+  categoryId        String
+  category          Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  amount            BigInt
+  frequency         BudgetFrequency
+  paymentMethod     PaymentMethod
+  fundingAccountId  String
+  fundingAccount    Account         @relation(fields: [fundingAccountId], references: [id], onDelete: Restrict)
+  normalizedMonthly BigInt // round(amount * occurrencesPerYear / 12)
+  active            Boolean         @default(true)
+}
+
+model BudgetPeriodActual {
+  id          String   @id @default(cuid())
+  periodLabel String // e.g. "2025-06"
+  categoryId  String
+  category    Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  budgeted    BigInt
+  spent       BigInt
+
+  @@unique([periodLabel, categoryId])
+}
+
+model IncomePlan {
+  id            String @id @default(cuid())
+  label         String
+  monthlyAmount BigInt
+}
+
+// ---------- Email ingestion ----------
+
+enum ParseStatus {
+  unparsed
+  parsed
+  failed
+  ignored
+}
+
+enum TxnDirection {
+  outflow
+  inflow
+}
+
+model RawEmail {
+  id                   String      @id @default(cuid())
+  fromAddress          String
+  subject              String
+  body                 String      @db.Text
+  receivedAt           DateTime
+  matchedRuleId        String?
+  matchedRule          ParserRule? @relation(fields: [matchedRuleId], references: [id], onDelete: SetNull)
+  parseStatus          ParseStatus @default(unparsed)
+  createdTransactionId String?
+  createdAt            DateTime    @default(now())
+
+  transaction Transaction?
+}
+
+model ParserRule {
+  id               String       @id @default(cuid())
+  name             String
+  senderMatch      String
+  subjectPattern   String?
+  bodyPattern      String // regex with named groups: amount, date, merchant, direction?
+  accountId        String
+  account          Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  defaultDirection TxnDirection @default(outflow)
+
+  rawEmails RawEmail[]
+}

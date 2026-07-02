@@ -1,26 +1,96 @@
 @import "tailwindcss";
 
+/* Design system: dark-only OLED fintech (ui-ux-pro-max recommendation).
+   Trust blue primary, profit green accent, deep slate surfaces. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  --surface: #101a34;
+  --surface-raised: #16223f;
+  --primary: #1e40af;
+  --primary-hover: #1d4ed8;
+  --secondary: #3b82f6;
+  --accent: #059669;
+  --accent-hover: #047857;
+  --destructive: #dc2626;
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --text-muted: #8ba0bf;
+  --positive: #34d399;
+  --negative: #f87171;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-secondary: var(--secondary);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-destructive: var(--destructive);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-muted: var(--text-muted);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+  --font-sans: var(--font-fira-sans);
+  --font-mono: var(--font-fira-code);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-fira-sans), system-ui, sans-serif;
+}
+
+@utility card {
+  @apply rounded-xl border border-border-subtle bg-surface p-4;
+}
+@utility input {
+  @apply w-full rounded-lg border border-border-strong bg-surface-raised px-3 py-2 text-foreground placeholder:text-muted/60 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-secondary focus:border-transparent;
+}
+@utility label {
+  @apply block text-sm font-medium mb-1 text-foreground;
+}
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium cursor-pointer transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary disabled:opacity-50 disabled:cursor-not-allowed;
+}
+@utility btn-primary {
+  @apply btn bg-accent hover:bg-accent-hover text-white;
+}
+@utility btn-secondary {
+  @apply btn bg-primary hover:bg-primary-hover text-white;
+}
+@utility btn-ghost {
+  @apply btn border border-border-strong text-foreground hover:bg-surface-raised;
+}
+@utility btn-danger {
+  @apply btn border border-destructive/50 text-negative hover:bg-destructive/10;
+}
+@utility amount {
+  @apply font-mono tabular-nums;
+}
+
+/* Amounts: money out red, money in green */
+.amount-negative {
+  color: var(--negative);
+}
+.amount-positive {
+  color: var(--positive);
+}
+.amount-zero {
+  color: var(--text-muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

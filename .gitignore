@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# playwright MCP artifacts
+.playwright-mcp/
+
+# generated prisma client (npx prisma generate)
+src/generated/
