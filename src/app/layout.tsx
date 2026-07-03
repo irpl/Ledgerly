@@ -16,12 +16,12 @@ const firaCode = Fira_Code({
 });
 
 export const metadata: Metadata = {
-  title: "Finance Tracker",
+  title: "Ledgerly",
   description: "Personal finance tracker",
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Finance",
+    title: "Ledgerly",
   },
   icons: {
     apple: "/icons/apple-touch-icon.png",

@@ -71,7 +71,7 @@ function LoginForm() {
 export default function LoginPage() {
   return (
     <main className="min-h-dvh flex flex-col items-center justify-center px-4">
-      <h1 className="text-2xl font-bold mb-6">Finance Tracker</h1>
+      <h1 className="text-2xl font-bold mb-6">Ledgerly</h1>
       <Suspense>
         <LoginForm />
       </Suspense>

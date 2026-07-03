@@ -33,7 +33,7 @@ export function SidebarNav() {
   const pathname = usePathname();
   return (
     <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-border-subtle p-4 gap-1 min-h-dvh sticky top-0">
-      <div className="font-bold text-lg mb-4 px-2">Finance Tracker</div>
+      <div className="font-bold text-lg mb-4 px-2">Ledgerly</div>
       {NAV_ITEMS.map(({ href, label, Icon }) => (
         <Link
           key={href}
