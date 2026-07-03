@@ -10,6 +10,13 @@
 the browser**, including a production build (`npm run build` + `npm start`
 with the service worker active). Committed as `fcd83b5`.
 
+**The app is deployed and live** (as of 2026-07-02): the repo is on
+github.com/irpl/Ledgerly, running on Coolify at
+`https://ledgerly.philliplogan.com`, with DNS on Cloudflare and email
+ingestion working end-to-end (Cloudflare Email Routing → Worker →
+`/api/inbound-email`, raw MIME parsed server-side by postal-mime). See
+`docs/email-ingestion.md` (Option A) and `docs/deploy-coolify.md`.
+
 | Phase | Feature | State |
 |---|---|---|
 | 1 | Auth, accounts CRUD, signed balances, per-currency totals | done |
@@ -27,33 +34,40 @@ daily fetch, and converted rollups do not.
 ## To resume development
 
 ```powershell
-docker compose up -d       # Postgres (jan/jan@localhost:5432/jan)
+npx prisma dev --detach    # Prisma Postgres local server (NOT Docker — see AGENTS.md)
+# ports change per restart: check `npx prisma dev ls`, then update
+# DATABASE_URL / SHADOW_DATABASE_URL in .env
 npm run dev                # http://localhost:3000
 # login: ADMIN_EMAIL / ADMIN_PASSWORD from .env (seeded; re-run npx prisma db seed after changing)
 ```
 
-Schema changes: edit `prisma/schema.prisma` → `npx prisma migrate dev --name x`
-→ **restart the dev server** (it caches the generated client). The DB currently
-holds test data (NCB, Credit Card, Car Loan accounts, a few transactions, one
-NCB parser rule) — safe to wipe with `npx prisma migrate reset`.
+Schema changes: edit `prisma/schema.prisma` → `npx prisma db push` (local dev;
+`migrate dev` fails P1017 against the PGlite dev server) → **restart the dev
+server** (it caches the generated client). For deployable migrations, generate
+SQL offline with `prisma migrate diff` into `prisma/migrations/`.
+
+## Done ✓
+
+1. ~~Change the login password~~ — done (admin password changed from the
+   `changeme123` placeholder).
+2. ~~Push the repo~~ — done (github.com/irpl/Ledgerly, `main`).
+3. ~~Deploy on Coolify~~ — done (live at `https://ledgerly.philliplogan.com`,
+   `AUTH_TRUST_HOST=true`, HTTPS via Cloudflare).
+4. ~~Wire up email ingestion~~ — done (Cloudflare Email Routing → Worker →
+   `/api/inbound-email`; the Worker's source is `~/Downloads/ledgerly-email-worker.js`).
 
 ## Next steps (in rough order)
 
-1. **Change the login password** — `.env` still has the `changeme123`
-   placeholder. Edit `ADMIN_PASSWORD`, run `npx prisma db seed`.
-2. **Push the repo** to GitHub/Gitea (`git remote add origin … && git push -u
-   origin main`).
-3. **Deploy on Coolify** — follow `docs/deploy-coolify.md` (Postgres resource,
-   env vars incl. `AUTH_TRUST_HOST=true`, domain + HTTPS, scheduled DB
-   backups). The Dockerfile migrates + seeds on boot.
-4. **Wire up email ingestion** — follow `docs/email-ingestion.md`: Cloudflare
-   Email Routing + the Email Worker posting to
-   `${APP_BASE_URL}/api/inbound-email`, then forward real bank alerts and
-   build parser rules from the Review page (it has a live regex tester).
-5. **Test the iOS install path** on a real device after HTTPS deploy (Share →
-   Add to Home Screen) — spec §6 calls this out explicitly. Android Chrome
-   install should also be sanity-checked.
-6. **Import historical data** (optional) — the spreadsheet's transaction
+1. **Build parser rules from real bank alerts** — forward an alert, then on
+   the **Review** page use "Create rule from this" (sender + live regex
+   tester) to add a named-group rule (`amount` required; `date`/`merchant`/
+   `direction` optional). Confirm the resulting `pending_review` transaction.
+2. **Enable scheduled DB backups** on the Coolify Postgres resource if not
+   already on. CSV export (/settings) is the secondary human-readable backup.
+3. **Test the iOS install path** on a real device (Share → Add to Home
+   Screen) — spec §6 calls this out explicitly. Android Chrome install should
+   also be sanity-checked.
+4. **Import historical data** (optional) — the spreadsheet's transaction
    history could be imported via `POST /api/transactions` per row, or a
    one-off script; vendor memory will seed itself from descriptions.
 
