@@ -16,7 +16,7 @@ Bank alerts flow: **bank → your inbox → forwarding rule → catch address �
 Cloudflare Email Worker → `POST /api/inbound-email` → review queue**.
 
 The endpoint is provider-agnostic: any service that can POST
-`{ from, subject, text?, html?, receivedAt? }` with the shared secret works
+`{ from, to?, subject, text?, html?, receivedAt? }` with the shared secret works
 (Mailgun/Postmark/SendGrid inbound parse, or a self-hosted SMTP bridge).
 
 ## 1. Endpoint contract
@@ -24,12 +24,31 @@ The endpoint is provider-agnostic: any service that can POST
 ```
 POST {APP_BASE_URL}/api/inbound-email
 Header: x-inbound-email-secret: {INBOUND_EMAIL_SECRET}
-Body: { "from": "...", "subject": "...", "text": "...", "html": "...", "receivedAt": "ISO-8601" }
+Body: { "from": "...", "to": "...", "subject": "...", "text": "...", "html": "...", "receivedAt": "ISO-8601" }
 ```
 
 Responses: `201` with `{ id, outcome }`, `401` bad secret, `429` rate-limited.
 Parsed transactions are created as `pending_review` — balances change only after
 you confirm them on the **Review** page.
+
+### Per-user routing (multi-user)
+
+Each inbound email is routed to a user before parsing, in this order:
+
+1. **Recipient key** — the recipient's local part (or `+tag`) is matched against
+   each user's `inboundKey` (shown on the Settings page). E.g. with catch domain
+   `bank.yourdomain.com`, user Jan forwards to `<her-key>@bank.yourdomain.com`
+   or `alerts+<her-key>@bank.yourdomain.com`.
+2. **Registered sender** — the `From:` address is matched against each user's
+   registered *forward-from addresses* (Settings → Email ingestion). This is
+   what routes **manual forwards**, which arrive from the user's own mailbox.
+3. **Unrouted** — no match: the email is stored with no owner, is never parsed,
+   and appears only to admins on the Review page, where it can be assigned to a
+   user (which then runs that user's parser rules).
+
+Set `INBOUND_EMAIL_DOMAIN` (e.g. `bank.yourdomain.com`) so the Settings page can
+display each user's full inbound address. Parser rules are per-user: an email
+only ever matches rules belonging to the user it was routed to.
 
 ## 2. Option A: Cloudflare Email Worker
 
@@ -48,8 +67,10 @@ export default {
       },
       body: JSON.stringify({
         // Send the full raw MIME; the app parses it (postal-mime) into clean
-        // text/html/from/subject. from/subject here are only fallbacks.
+        // text/html/from/subject. from/to/subject here are only fallbacks.
         from: message.from,
+        // Envelope recipient — used to route the email to a user (inboundKey).
+        to: message.to,
         subject: message.headers.get("subject") ?? "",
         raw,
         receivedAt: new Date().toISOString(),

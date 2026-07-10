@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
-import { prisma, resetDb } from "../helpers/db";
+import { prisma, resetDb, createTestUser } from "../helpers/db";
 import { recomputeBalance } from "@/lib/accounts";
 
 describe("recomputeBalance", () => {
@@ -7,8 +7,10 @@ describe("recomputeBalance", () => {
   afterAll(() => prisma.$disconnect());
 
   async function makeAccount(openingBalance: bigint) {
+    const user = await createTestUser();
     return prisma.account.create({
       data: {
+        userId: user.id,
         name: "NCB",
         type: "checking",
         currency: "JMD",

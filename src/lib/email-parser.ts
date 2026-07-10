@@ -7,6 +7,7 @@ import { majorToMinor } from "@/lib/money";
 
 export type ParsedMime = {
   from: string;
+  to: string | null;
   subject: string;
   text: string | null;
   html: string | null;
@@ -22,6 +23,8 @@ export async function parseRawMime(raw: string): Promise<ParsedMime> {
   const email = await PostalMime.parse(raw);
   return {
     from: email.from?.address ?? email.from?.name ?? "",
+    // deliveredTo covers Bcc-style delivery where To: doesn't name us.
+    to: email.to?.[0]?.address ?? email.deliveredTo ?? null,
     subject: email.subject ?? "",
     text: email.text ?? null,
     html: email.html ?? null,
@@ -111,7 +114,12 @@ export type ParseOutcome =
  * pending-review transaction (does NOT touch balances until confirmed).
  */
 export async function applyParserRules(email: RawEmail): Promise<ParseOutcome> {
-  const rules = await prisma.parserRule.findMany({ orderBy: { name: "asc" } });
+  // Rules are per-user; an unrouted email (no owner) is never parsed.
+  if (!email.userId) return { status: "unparsed" };
+  const rules = await prisma.parserRule.findMany({
+    where: { userId: email.userId },
+    orderBy: { name: "asc" },
+  });
   const from = email.fromAddress.toLowerCase();
 
   for (const rule of rules) {
@@ -163,7 +171,7 @@ export async function applyParserRules(email: RawEmail): Promise<ParseOutcome> {
     const merchant = match.groups.merchant?.trim() || null;
 
     const transaction = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const vendorId = await upsertVendor(tx, merchant, null);
+      const vendorId = await upsertVendor(tx, email.userId!, merchant, null);
       const created = await tx.transaction.create({
         data: {
           accountId: rule.accountId,

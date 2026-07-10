@@ -11,6 +11,7 @@ export type MonthlyIncomeExpense = {
 
 /** Income vs expense per month for the last `months` months, grouped by account currency. */
 export async function monthlyIncomeExpense(
+  userId: string,
   months: number,
   accountId?: string
 ): Promise<Map<string, MonthlyIncomeExpense[]>> {
@@ -19,6 +20,7 @@ export async function monthlyIncomeExpense(
 
   const rows = await prisma.transaction.findMany({
     where: {
+      account: { userId },
       status: "confirmed",
       transferGroupId: null,
       occurredAt: { gte: start },
@@ -69,12 +71,14 @@ export type CategorySpend = {
 
 /** Confirmed non-transfer expense totals per category in [start, end), grouped by currency. */
 export async function categorySpend(
+  userId: string,
   start: Date,
   end: Date,
   accountId?: string
 ): Promise<Map<string, CategorySpend[]>> {
   const rows = await prisma.transaction.findMany({
     where: {
+      account: { userId },
       status: "confirmed",
       transferGroupId: null,
       amount: { lt: 0 },
@@ -124,12 +128,14 @@ export type IncomeExpenseTotals = { income: number; expense: number };
 
 /** Period totals per currency (confirmed, non-transfer). */
 export async function periodTotals(
+  userId: string,
   start: Date,
   end: Date,
   accountId?: string
 ): Promise<Map<string, IncomeExpenseTotals>> {
   const rows = await prisma.transaction.findMany({
     where: {
+      account: { userId },
       status: "confirmed",
       transferGroupId: null,
       occurredAt: { gte: start, lt: end },
@@ -151,7 +157,11 @@ export async function periodTotals(
 
 export type BalancePoint = { date: string; balance: number };
 
-/** Daily running balance for an account over the last `days` days (all confirmed txns count). */
+/**
+ * Daily running balance for an account over the last `days` days (all
+ * confirmed txns count). Not user-scoped: callers must have already verified
+ * the account belongs to the current user.
+ */
 export async function runningBalance(accountId: string, days: number): Promise<BalancePoint[]> {
   const account = await prisma.account.findUniqueOrThrow({
     where: { id: accountId },
@@ -198,15 +208,16 @@ export type BudgetActualRow = {
  * normalizedMonthly of the category's active budget lines; spent = Σ confirmed
  * non-transfer expenses. Rows are persisted into BudgetPeriodActual.
  */
-export async function budgetVsActual(periodLabel: string, start: Date, end: Date) {
+export async function budgetVsActual(userId: string, periodLabel: string, start: Date, end: Date) {
   const [lines, spendRows] = await Promise.all([
     prisma.budgetLine.findMany({
-      where: { active: true },
+      where: { userId, active: true },
       select: { categoryId: true, normalizedMonthly: true },
     }),
     prisma.transaction.groupBy({
       by: ["categoryId"],
       where: {
+        account: { userId },
         status: "confirmed",
         transferGroupId: null,
         amount: { lt: 0 },
@@ -235,7 +246,7 @@ export async function budgetVsActual(periodLabel: string, start: Date, end: Date
   if (categoryIds.length === 0) return [] as BudgetActualRow[];
 
   const categories = await prisma.category.findMany({
-    where: { id: { in: categoryIds } },
+    where: { id: { in: categoryIds }, userId },
     select: { id: true, name: true },
   });
   const nameById = new Map(categories.map((c) => [c.id, c.name]));

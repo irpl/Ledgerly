@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requireUserId } from "@/lib/current-user";
 import { toAccountDTO } from "@/lib/accounts";
 import { totalsByCurrency } from "@/lib/account-shared";
 import { formatMoney, amountClass } from "@/lib/money";
@@ -10,11 +11,12 @@ export const dynamic = "force-dynamic";
 export default async function AccountsPage(props: {
   searchParams: Promise<{ archived?: string }>;
 }) {
+  const userId = await requireUserId();
   const searchParams = await props.searchParams;
   const showArchived = searchParams.archived === "1";
 
   const rows = await prisma.account.findMany({
-    where: showArchived ? {} : { archived: false },
+    where: { userId, ...(showArchived ? {} : { archived: false }) },
     include: { loanDetails: true },
     orderBy: [{ archived: "asc" }, { createdAt: "asc" }],
   });

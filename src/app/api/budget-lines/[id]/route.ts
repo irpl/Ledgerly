@@ -1,21 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { budgetLineInput } from "@/lib/validation";
 import { normalizedMonthly } from "@/lib/budget-shared";
 import { toBudgetLineDTO } from "@/lib/budget";
 import { majorToMinor } from "@/lib/money";
+import { ownsAccount, ownsCategory } from "@/lib/ownership";
 
 const INCLUDE = { category: true, fundingAccount: true } as const;
 
 type Params = { params: Promise<{ id: string }> };
 
 export async function PATCH(req: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const existing = await prisma.budgetLine.findUnique({ where: { id } });
+  const existing = await prisma.budgetLine.findFirst({ where: { id, userId } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   const parsed = budgetLineInput.partial().safeParse(await req.json());
@@ -26,6 +27,12 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     );
   }
   const data = parsed.data;
+  if (
+    (data.categoryId && !(await ownsCategory(userId, data.categoryId))) ||
+    (data.fundingAccountId && !(await ownsAccount(userId, data.fundingAccountId)))
+  ) {
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
+  }
 
   // Editing amount or frequency recomputes the derived monthly figure.
   const nextAmount =
@@ -51,11 +58,11 @@ export async function PATCH(req: NextRequest, { params }: Params) {
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const existing = await prisma.budgetLine.findUnique({ where: { id } });
+  const existing = await prisma.budgetLine.findFirst({ where: { id, userId } });
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
 
   await prisma.budgetLine.delete({ where: { id } });

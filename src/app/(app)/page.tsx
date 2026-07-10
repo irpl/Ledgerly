@@ -8,6 +8,7 @@ import { IncomeExpenseChart } from "@/components/charts/income-expense-chart";
 import { CategoryDonut } from "@/components/charts/category-donut";
 import { resolvePeriod, PERIOD_PRESETS, PERIOD_LABELS } from "@/lib/period";
 import { monthlyIncomeExpense, categorySpend, periodTotals } from "@/lib/analytics";
+import { requireUserId } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -16,23 +17,24 @@ const REPORTING_CURRENCY = process.env.REPORTING_CURRENCY ?? "JMD";
 export default async function DashboardPage(props: {
   searchParams: Promise<{ period?: string }>;
 }) {
+  const userId = await requireUserId();
   const searchParams = await props.searchParams;
   const period = resolvePeriod(searchParams.period);
 
   const [rows, overTime, byCategory, totals, budgetLines, incomeRows] = await Promise.all([
     prisma.account.findMany({
-      where: { archived: false },
+      where: { userId, archived: false },
       include: { loanDetails: true },
       orderBy: { createdAt: "asc" },
     }),
-    monthlyIncomeExpense(period.chartMonths),
-    categorySpend(period.start, period.end),
-    periodTotals(period.start, period.end),
+    monthlyIncomeExpense(userId, period.chartMonths),
+    categorySpend(userId, period.start, period.end),
+    periodTotals(userId, period.start, period.end),
     prisma.budgetLine.findMany({
-      where: { active: true },
+      where: { userId, active: true },
       include: { fundingAccount: { select: { currency: true } } },
     }),
-    prisma.incomePlan.findMany(),
+    prisma.incomePlan.findMany({ where: { userId } }),
   ]);
 
   const accounts = rows.map(toAccountDTO);

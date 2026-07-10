@@ -1,14 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { incomePlanInput } from "@/lib/validation";
 import { majorToMinor } from "@/lib/money";
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const items = await prisma.incomePlan.findMany({ orderBy: { label: "asc" } });
+  const items = await prisma.incomePlan.findMany({
+    where: { userId },
+    orderBy: { label: "asc" },
+  });
   return NextResponse.json({
     incomePlan: items.map((i) => ({
       id: i.id,
@@ -19,8 +22,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = incomePlanInput.safeParse(await req.json());
   if (!parsed.success) {
@@ -31,6 +34,7 @@ export async function POST(req: NextRequest) {
   }
   const item = await prisma.incomePlan.create({
     data: {
+      userId,
       label: parsed.data.label,
       monthlyAmount: BigInt(majorToMinor(parsed.data.monthlyAmount)),
     },

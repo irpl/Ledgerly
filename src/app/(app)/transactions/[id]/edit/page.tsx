@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { requireUserId } from "@/lib/current-user";
 import { toAccountDTO } from "@/lib/accounts";
 import { toTransactionDTO } from "@/lib/transactions";
 import { formatMoney, amountClass } from "@/lib/money";
@@ -12,18 +13,22 @@ export const dynamic = "force-dynamic";
 export default async function EditTransactionPage(props: {
   params: Promise<{ id: string }>;
 }) {
+  const userId = await requireUserId();
   const { id } = await props.params;
   const [transaction, accounts, categories] = await Promise.all([
-    prisma.transaction.findUnique({
-      where: { id },
+    prisma.transaction.findFirst({
+      where: { id, account: { userId } },
       include: { account: true, category: true, vendor: true },
     }),
     prisma.account.findMany({
-      where: { archived: false },
+      where: { userId, archived: false },
       include: { loanDetails: true },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.category.findMany({ orderBy: [{ kind: "asc" }, { name: "asc" }] }),
+    prisma.category.findMany({
+      where: { userId },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+    }),
   ]);
   if (!transaction) notFound();
 

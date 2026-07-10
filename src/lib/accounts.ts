@@ -39,7 +39,11 @@ export function toAccountDTO(
   };
 }
 
-/** Recompute the cached balance: opening + Σ confirmed transactions. */
+/**
+ * Recompute the cached balance: opening + Σ confirmed transactions.
+ * Not user-scoped by design: callers pass an id they already ownership-checked,
+ * and the aggregation only reads that account's own rows.
+ */
 export async function recomputeBalance(accountId: string): Promise<void> {
   const account = await prisma.account.findUniqueOrThrow({
     where: { id: accountId },

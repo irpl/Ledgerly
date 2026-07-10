@@ -1,12 +1,14 @@
 import Link from "next/link";
 import { getLiabilityRows } from "@/lib/liabilities";
+import { requireUserId } from "@/lib/current-user";
 import { availableCredit, payoffProgress } from "@/lib/account-shared";
 import { formatMoney, amountClass } from "@/lib/money";
 
 export const dynamic = "force-dynamic";
 
 export default async function LiabilitiesPage() {
-  const rows = await getLiabilityRows();
+  const userId = await requireUserId();
+  const rows = await getLiabilityRows(userId);
 
   return (
     <div className="space-y-6">

@@ -136,3 +136,45 @@ export const parserRuleInput = z.object({
 });
 
 export type ParserRuleInput = z.infer<typeof parserRuleInput>;
+
+// ---------- User settings & admin (multi-user) ----------
+
+export const changePasswordInput = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8).max(200),
+});
+
+export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
+
+export const profileInput = z.object({
+  email: z.string().trim().email().max(320).optional(),
+  displayName: z.string().trim().max(100).nullish(),
+});
+
+export type ProfileInput = z.infer<typeof profileInput>;
+
+export const forwardAddressInput = z.object({
+  address: z
+    .string()
+    .trim()
+    .email()
+    .max(320)
+    .transform((s) => s.toLowerCase()),
+});
+
+export type ForwardAddressInput = z.infer<typeof forwardAddressInput>;
+
+export const adminCreateUserInput = z.object({
+  email: z.string().trim().email().max(320),
+  displayName: z.string().trim().max(100).nullish(),
+  password: z.string().min(8).max(200),
+  role: z.enum(["admin", "user"]).default("user"),
+});
+
+export type AdminCreateUserInput = z.infer<typeof adminCreateUserInput>;
+
+export const adminResetPasswordInput = z.object({
+  password: z.string().min(8).max(200),
+});
+
+export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordInput>;

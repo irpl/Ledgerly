@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { getLiabilityRows } from "@/lib/liabilities";
 import { availableCredit } from "@/lib/account-shared";
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const rows = await getLiabilityRows();
+  const rows = await getLiabilityRows(userId);
   return NextResponse.json({
     liabilities: rows.map(({ account, budget, spent, remaining }) => ({
       account,

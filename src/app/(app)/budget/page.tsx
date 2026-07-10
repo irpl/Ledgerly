@@ -9,6 +9,7 @@ import { BudgetManager } from "@/components/budget-manager";
 import { BudgetActualMeters } from "@/components/budget-actual-meters";
 import { budgetVsActual } from "@/lib/analytics";
 import { monthLabel, parseMonthLabel } from "@/lib/period";
+import { requireUserId } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
@@ -23,6 +24,7 @@ function shiftMonth(label: string, delta: number): string {
 export default async function BudgetPage(props: {
   searchParams: Promise<{ month?: string }>;
 }) {
+  const userId = await requireUserId();
   const searchParams = await props.searchParams;
   const currentLabel = monthLabel(new Date());
   const selectedMonth =
@@ -33,16 +35,17 @@ export default async function BudgetPage(props: {
 
   const [lines, incomeRows, categories, accounts] = await Promise.all([
     prisma.budgetLine.findMany({
+      where: { userId },
       include: { category: true, fundingAccount: true },
       orderBy: [{ active: "desc" }, { name: "asc" }],
     }),
-    prisma.incomePlan.findMany({ orderBy: { label: "asc" } }),
+    prisma.incomePlan.findMany({ where: { userId }, orderBy: { label: "asc" } }),
     prisma.category.findMany({
-      where: { kind: { in: ["expense", "both"] } },
+      where: { userId, kind: { in: ["expense", "both"] } },
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({
-      where: { archived: false },
+      where: { userId, archived: false },
       include: { loanDetails: true },
       orderBy: { createdAt: "asc" },
     }),
@@ -80,7 +83,7 @@ export default async function BudgetPage(props: {
   const reportingExpenses = byCurrency.get(REPORTING_CURRENCY)?.total ?? 0;
   const surplus = plannedIncome - reportingExpenses;
 
-  const actualRows = await budgetVsActual(selectedMonth, monthRange.start, monthRange.end);
+  const actualRows = await budgetVsActual(userId, selectedMonth, monthRange.start, monthRange.end);
 
   return (
     <div className="space-y-8">

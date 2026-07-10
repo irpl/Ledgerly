@@ -5,6 +5,7 @@ import { parseRawMime } from "@/lib/email-parser";
 
 const inboundEmailInput = z.object({
   from: z.string().trim().max(500).optional(),
+  to: z.string().trim().max(500).optional(),
   subject: z.string().trim().max(1000).optional(),
   text: z.string().max(200_000).nullish(),
   html: z.string().max(500_000).nullish(),
@@ -52,6 +53,7 @@ export async function POST(req: NextRequest) {
 
   const { id, outcome } = await ingestInboundEmail({
     from,
+    to: mime?.to || data.to || null,
     subject: mime?.subject || data.subject || "",
     text: mime?.text ?? data.text,
     html: mime?.html ?? data.html,

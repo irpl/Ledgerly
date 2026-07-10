@@ -18,5 +18,24 @@ export async function resetDb() {
   await prisma.account.deleteMany();
   await prisma.category.deleteMany();
   await prisma.fxRate.deleteMany();
+  await prisma.forwardAddress.deleteMany();
   await prisma.user.deleteMany();
+}
+
+// bcrypt hash of "test-password-123" (cost 4 — cheap on purpose; tests only).
+export const TEST_PASSWORD = "test-password-123";
+export const TEST_PASSWORD_HASH = "$2b$04$fgDhN.dj8sNTgxo.55Jk.O61w2aifFqC3EreDnFqlLn15CW.LdCTG";
+
+let userCounter = 0;
+
+/** Create a test user; every tenant-scoped fixture needs one. */
+export async function createTestUser(overrides?: { email?: string; role?: "admin" | "user" }) {
+  userCounter += 1;
+  return prisma.user.create({
+    data: {
+      email: overrides?.email ?? `test-user-${userCounter}@example.com`,
+      passwordHash: TEST_PASSWORD_HASH,
+      role: overrides?.role ?? "user",
+    },
+  });
 }

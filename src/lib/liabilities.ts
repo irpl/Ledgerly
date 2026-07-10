@@ -20,11 +20,11 @@ export function currentMonthRange(): { start: Date; end: Date } {
   return { start, end };
 }
 
-export async function getLiabilityRows(): Promise<LiabilityRow[]> {
+export async function getLiabilityRows(userId: string): Promise<LiabilityRow[]> {
   const { start, end } = currentMonthRange();
 
   const accounts = await prisma.account.findMany({
-    where: { archived: false, type: { in: ["credit_card", "loan"] } },
+    where: { userId, archived: false, type: { in: ["credit_card", "loan"] } },
     include: { loanDetails: true },
     orderBy: { createdAt: "asc" },
   });

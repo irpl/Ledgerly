@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { applyParserRules } from "@/lib/email-parser";
 
@@ -7,12 +7,12 @@ type Params = { params: Promise<{ id: string }> };
 
 /** Re-run parser rules against an email (after creating/fixing a rule). */
 export async function POST(_req: NextRequest, { params }: Params) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const { id } = await params;
-  const email = await prisma.rawEmail.findUnique({
-    where: { id },
+  const email = await prisma.rawEmail.findFirst({
+    where: { id, userId },
     include: { transaction: true },
   });
   if (!email) return NextResponse.json({ error: "Not found" }, { status: 404 });

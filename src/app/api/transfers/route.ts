@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { transferInput } from "@/lib/validation";
 import { recomputeBalance } from "@/lib/accounts";
@@ -10,8 +10,8 @@ import { majorToMinor } from "@/lib/money";
 const INCLUDE = { account: true, category: true, vendor: true } as const;
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = transferInput.safeParse(await req.json());
   if (!parsed.success) {
@@ -23,8 +23,8 @@ export async function POST(req: NextRequest) {
   const data = parsed.data;
 
   const [from, to] = await Promise.all([
-    prisma.account.findUnique({ where: { id: data.fromAccountId } }),
-    prisma.account.findUnique({ where: { id: data.toAccountId } }),
+    prisma.account.findFirst({ where: { id: data.fromAccountId, userId } }),
+    prisma.account.findFirst({ where: { id: data.toAccountId, userId } }),
   ]);
   if (!from || !to) {
     return NextResponse.json({ error: "Account not found" }, { status: 400 });
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
 
   // Both legs share the seeded Transfer category when it still exists.
   const transferCategory = await prisma.category.findUnique({
-    where: { name_kind: { name: "Transfer", kind: "both" } },
+    where: { userId_name_kind: { userId, name: "Transfer", kind: "both" } },
   });
 
   const transferGroupId = randomUUID();

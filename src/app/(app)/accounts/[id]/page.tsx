@@ -14,15 +14,17 @@ import { IncomeExpenseChart } from "@/components/charts/income-expense-chart";
 import { CategoryDonut } from "@/components/charts/category-donut";
 import { runningBalance, monthlyIncomeExpense, categorySpend } from "@/lib/analytics";
 import { resolvePeriod } from "@/lib/period";
+import { requireUserId } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
 export default async function AccountDetailPage(props: {
   params: Promise<{ id: string }>;
 }) {
+  const userId = await requireUserId();
   const { id } = await props.params;
-  const row = await prisma.account.findUnique({
-    where: { id },
+  const row = await prisma.account.findFirst({
+    where: { id, userId },
     include: { loanDetails: true },
   });
   if (!row) notFound();
@@ -40,8 +42,8 @@ export default async function AccountDetailPage(props: {
       include: { category: true, vendor: true },
     }),
     runningBalance(id, 90),
-    monthlyIncomeExpense(6, id),
-    categorySpend(period.start, period.end, id),
+    monthlyIncomeExpense(userId, 6, id),
+    categorySpend(userId, period.start, period.end, id),
   ]);
   const accountOverTime = overTime.get(account.currency);
   const accountSpend = spendByCurrency.get(account.currency) ?? [];

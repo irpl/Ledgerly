@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { categoryInput } from "@/lib/validation";
 import type { CategoryDTO, CategoryKindValue } from "@/lib/category-shared";
 
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const categories = await prisma.category.findMany({
+    where: { userId },
     orderBy: [{ kind: "asc" }, { name: "asc" }],
     include: { _count: { select: { transactions: true } } },
   });
@@ -26,8 +27,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = categoryInput.safeParse(await req.json());
   if (!parsed.success) {
@@ -38,7 +39,7 @@ export async function POST(req: NextRequest) {
   }
   const data = parsed.data;
   const existing = await prisma.category.findUnique({
-    where: { name_kind: { name: data.name, kind: data.kind } },
+    where: { userId_name_kind: { userId, name: data.name, kind: data.kind } },
   });
   if (existing) {
     return NextResponse.json(
@@ -48,6 +49,7 @@ export async function POST(req: NextRequest) {
   }
   const category = await prisma.category.create({
     data: {
+      userId,
       name: data.name,
       kind: data.kind,
       parentId: data.parentId ?? null,

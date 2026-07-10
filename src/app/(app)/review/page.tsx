@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { getAdminUser, requireUserId } from "@/lib/current-user";
 import { toAccountDTO } from "@/lib/accounts";
 import { toTransactionDTO } from "@/lib/transactions";
 import {
@@ -7,31 +8,50 @@ import {
   type UnmatchedEmail,
   type RuleItem,
 } from "@/components/review-queue";
+import { UnroutedEmails } from "@/components/unrouted-emails";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReviewPage() {
+  const userId = await requireUserId();
   const [pendingRows, emailRows, ruleRows, accounts] = await Promise.all([
     prisma.transaction.findMany({
-      where: { status: "pending_review" },
+      where: { status: "pending_review", account: { userId } },
       include: { account: true, category: true, vendor: true, rawEmail: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.rawEmail.findMany({
-      where: { parseStatus: { in: ["unparsed", "failed"] } },
+      where: { userId, parseStatus: { in: ["unparsed", "failed"] } },
       orderBy: { receivedAt: "desc" },
       take: 50,
     }),
     prisma.parserRule.findMany({
+      where: { userId },
       include: { account: { select: { name: true } } },
       orderBy: { name: "asc" },
     }),
     prisma.account.findMany({
-      where: { archived: false },
+      where: { userId, archived: false },
       include: { loanDetails: true },
       orderBy: { createdAt: "asc" },
     }),
   ]);
+
+  // Admins also see unrouted emails (no user matched) and can assign them.
+  const admin = await getAdminUser();
+  const [unroutedRows, allUsers] = admin
+    ? await Promise.all([
+        prisma.rawEmail.findMany({
+          where: { userId: null },
+          orderBy: { receivedAt: "desc" },
+          take: 50,
+        }),
+        prisma.user.findMany({
+          select: { id: true, email: true, displayName: true },
+          orderBy: { email: "asc" },
+        }),
+      ])
+    : [[], []];
 
   const pending: PendingItem[] = pendingRows.map((t) => ({
     ...toTransactionDTO(t),
@@ -68,6 +88,21 @@ export default async function ReviewPage() {
         rules={rules}
         accounts={accounts.map(toAccountDTO)}
       />
+      {admin && unroutedRows.length > 0 && (
+        <UnroutedEmails
+          emails={unroutedRows.map((e) => ({
+            id: e.id,
+            fromAddress: e.fromAddress,
+            toAddress: e.toAddress,
+            subject: e.subject,
+            receivedAt: e.receivedAt.toISOString(),
+          }))}
+          users={allUsers.map((u) => ({
+            id: u.id,
+            label: u.displayName ? `${u.displayName} (${u.email})` : u.email,
+          }))}
+        />
+      )}
     </div>
   );
 }

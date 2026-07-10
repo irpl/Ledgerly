@@ -9,10 +9,16 @@ export const authConfig = {
   callbacks: {
     jwt({ token, user }) {
       if (user?.id) token.sub = user.id;
+      // Role travels in the JWT for UI hints only (e.g. showing the admin
+      // settings section); admin APIs re-check the role in the database.
+      if (user?.role) token.role = user.role;
       return token;
     },
     session({ session, token }) {
       if (token.sub && session.user) session.user.id = token.sub;
+      if (session.user) {
+        session.user.role = typeof token.role === "string" ? token.role : "user";
+      }
       return session;
     },
   },

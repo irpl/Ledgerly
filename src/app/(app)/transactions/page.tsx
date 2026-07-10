@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@/lib/prisma";
+import { requireUserId } from "@/lib/current-user";
 import { toTransactionDTO } from "@/lib/transactions";
 import type { TransactionDTO } from "@/lib/transaction-shared";
 import { formatMoney, amountClass } from "@/lib/money";
@@ -29,18 +30,22 @@ function groupByDay(transactions: TransactionDTO[]): Map<string, TransactionDTO[
 export default async function TransactionsPage(props: {
   searchParams: Promise<{ account?: string }>;
 }) {
+  const userId = await requireUserId();
   const searchParams = await props.searchParams;
   const accountFilter = searchParams.account;
 
   const [rows, accounts] = await Promise.all([
     prisma.transaction.findMany({
-      where: accountFilter ? { accountId: accountFilter } : {},
+      where: {
+        account: { userId },
+        ...(accountFilter ? { accountId: accountFilter } : {}),
+      },
       include: { account: true, category: true, vendor: true },
       orderBy: [{ occurredAt: "desc" }, { id: "desc" }],
       take: 100,
     }),
     prisma.account.findMany({
-      where: { archived: false },
+      where: { userId, archived: false },
       orderBy: { createdAt: "asc" },
       select: { id: true, name: true },
     }),

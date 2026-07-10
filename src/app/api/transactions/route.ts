@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { transactionInput } from "@/lib/validation";
 import { toTransactionDTO, upsertVendor, signedMinorAmount } from "@/lib/transactions";
 import { recomputeBalance } from "@/lib/accounts";
+import { ownsCategory } from "@/lib/ownership";
 
 const INCLUDE = { account: true, category: true, vendor: true } as const;
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const sp = req.nextUrl.searchParams;
   const accountId = sp.get("accountId") ?? undefined;
@@ -19,6 +20,7 @@ export async function GET(req: NextRequest) {
 
   const transactions = await prisma.transaction.findMany({
     where: {
+      account: { userId },
       ...(accountId ? { accountId } : {}),
       ...(categoryId ? { categoryId } : {}),
     },
@@ -37,8 +39,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = transactionInput.safeParse(await req.json());
   if (!parsed.success) {
@@ -49,9 +51,14 @@ export async function POST(req: NextRequest) {
   }
   const data = parsed.data;
 
-  const account = await prisma.account.findUnique({ where: { id: data.accountId } });
+  const account = await prisma.account.findFirst({
+    where: { id: data.accountId, userId },
+  });
   if (!account) {
     return NextResponse.json({ error: "Account not found" }, { status: 400 });
+  }
+  if (data.categoryId && !(await ownsCategory(userId, data.categoryId))) {
+    return NextResponse.json({ error: "Category not found" }, { status: 400 });
   }
   const occurredAt = new Date(data.occurredAt);
   if (Number.isNaN(occurredAt.getTime())) {
@@ -59,7 +66,7 @@ export async function POST(req: NextRequest) {
   }
 
   const created = await prisma.$transaction(async (tx) => {
-    const vendorId = await upsertVendor(tx, data.vendorName, data.categoryId ?? null);
+    const vendorId = await upsertVendor(tx, userId, data.vendorName, data.categoryId ?? null);
     return tx.transaction.create({
       data: {
         accountId: data.accountId,

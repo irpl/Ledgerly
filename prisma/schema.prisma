@@ -7,13 +7,43 @@ datasource db {
   provider = "postgresql"
 }
 
-// ---------- Auth ----------
+// ---------- Auth & tenancy ----------
+
+enum Role {
+  admin
+  user
+}
 
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
+  role         Role     @default(user)
+  displayName  String?
+  // Local-part token for per-user inbound email routing (key@domain or catch+key@domain).
+  inboundKey   String   @unique @default(cuid())
   createdAt    DateTime @default(now())
+
+  accounts         Account[]
+  categories       Category[]
+  vendors          Vendor[]
+  parserRules      ParserRule[]
+  budgetLines      BudgetLine[]
+  incomePlans      IncomePlan[]
+  rawEmails        RawEmail[]
+  forwardAddresses ForwardAddress[]
+}
+
+// Sender addresses (e.g. the user's own mailbox for manual forwards) that route
+// inbound email to this user when the recipient doesn't carry an inboundKey.
+model ForwardAddress {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  address   String   @unique // normalized: lowercase bare address
+  createdAt DateTime @default(now())
+
+  @@index([userId])
 }
 
 // ---------- Accounts ----------
@@ -32,6 +62,8 @@ enum AccountType {
 
 model Account {
   id             String       @id @default(cuid())
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   name           String
   type           AccountType
   currency       String       @default("JMD")
@@ -50,6 +82,8 @@ model Account {
   transactions Transaction[]
   budgetLines  BudgetLine[]
   parserRules  ParserRule[]
+
+  @@index([userId])
 }
 
 enum LoanKind {
@@ -102,6 +136,8 @@ enum CategoryKind {
 
 model Category {
   id        String       @id @default(cuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   name      String
   kind      CategoryKind
   parentId  String?
@@ -116,19 +152,23 @@ model Category {
   vendors       Vendor[]
   periodActuals BudgetPeriodActual[]
 
-  @@unique([name, kind])
+  @@unique([userId, name, kind])
 }
 
 model Vendor {
   id                String    @id @default(cuid())
+  userId            String
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name              String
-  nameNormalized    String    @unique // lowercased for case-insensitive uniqueness
+  nameNormalized    String // lowercased for case-insensitive uniqueness (per user)
   defaultCategoryId String?
   defaultCategory   Category? @relation(fields: [defaultCategoryId], references: [id], onDelete: SetNull)
   usageCount        Int       @default(0)
   lastUsedAt        DateTime?
 
   transactions Transaction[]
+
+  @@unique([userId, nameNormalized])
 }
 
 // ---------- Transactions ----------
@@ -186,6 +226,8 @@ enum PaymentMethod {
 
 model BudgetLine {
   id                String          @id @default(cuid())
+  userId            String
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   name              String
   categoryId        String
   category          Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
@@ -196,6 +238,8 @@ model BudgetLine {
   fundingAccount    Account         @relation(fields: [fundingAccountId], references: [id], onDelete: Restrict)
   normalizedMonthly BigInt // round(amount * occurrencesPerYear / 12)
   active            Boolean         @default(true)
+
+  @@index([userId])
 }
 
 model BudgetPeriodActual {
@@ -211,8 +255,12 @@ model BudgetPeriodActual {
 
 model IncomePlan {
   id            String @id @default(cuid())
+  userId        String
+  user          User   @relation(fields: [userId], references: [id], onDelete: Cascade)
   label         String
   monthlyAmount BigInt
+
+  @@index([userId])
 }
 
 // ---------- Email ingestion ----------
@@ -231,7 +279,11 @@ enum TxnDirection {
 
 model RawEmail {
   id                   String      @id @default(cuid())
+  // Null = unrouted (no user matched); visible/assignable by admins only.
+  userId               String?
+  user                 User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   fromAddress          String
+  toAddress            String?
   subject              String
   body                 String      @db.Text
   receivedAt           DateTime
@@ -242,10 +294,14 @@ model RawEmail {
   createdAt            DateTime    @default(now())
 
   transaction Transaction?
+
+  @@index([userId, parseStatus])
 }
 
 model ParserRule {
   id               String       @id @default(cuid())
+  userId           String
+  user             User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   name             String
   senderMatch      String
   subjectPattern   String?
@@ -255,4 +311,6 @@ model ParserRule {
   defaultDirection TxnDirection @default(outflow)
 
   rawEmails RawEmail[]
+
+  @@index([userId])
 }

@@ -39,6 +39,7 @@ export function signedMinorAmount(input: Pick<TransactionInput, "amount" | "dire
  */
 export async function upsertVendor(
   tx: Prisma.TransactionClient,
+  userId: string,
   name: string | null | undefined,
   categoryId: string | null | undefined
 ): Promise<string | null> {
@@ -46,13 +47,14 @@ export async function upsertVendor(
   if (!trimmed) return null;
   const normalized = trimmed.toLowerCase();
   const vendor = await tx.vendor.upsert({
-    where: { nameNormalized: normalized },
+    where: { userId_nameNormalized: { userId, nameNormalized: normalized } },
     update: {
       usageCount: { increment: 1 },
       lastUsedAt: new Date(),
       ...(categoryId ? { defaultCategoryId: categoryId } : {}),
     },
     create: {
+      userId,
       name: trimmed,
       nameNormalized: normalized,
       usageCount: 1,

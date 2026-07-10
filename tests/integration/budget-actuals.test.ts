@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterAll } from "vitest";
-import { prisma, resetDb } from "../helpers/db";
+import { prisma, resetDb, createTestUser } from "../helpers/db";
 import { budgetVsActual, monthlyIncomeExpense } from "@/lib/analytics";
 
 describe("budgetVsActual (spec Table 3-1)", () => {
@@ -7,14 +7,20 @@ describe("budgetVsActual (spec Table 3-1)", () => {
   afterAll(() => prisma.$disconnect());
 
   it("pairs budgeted vs spent per category, persisting a snapshot", async () => {
+    const user = await createTestUser();
     const account = await prisma.account.create({
-      data: { name: "NCB", type: "checking", currency: "JMD", openingBalance: 0n, currentBalance: 0n },
+      data: { userId: user.id, name: "NCB", type: "checking", currency: "JMD", openingBalance: 0n, currentBalance: 0n },
     });
-    const housing = await prisma.category.create({ data: { name: "Housing", kind: "expense" } });
-    const food = await prisma.category.create({ data: { name: "Food", kind: "expense" } });
+    const housing = await prisma.category.create({
+      data: { userId: user.id, name: "Housing", kind: "expense" },
+    });
+    const food = await prisma.category.create({
+      data: { userId: user.id, name: "Food", kind: "expense" },
+    });
 
     await prisma.budgetLine.create({
       data: {
+        userId: user.id,
         name: "Rent",
         categoryId: housing.id,
         amount: 15_000_000n,
@@ -52,7 +58,7 @@ describe("budgetVsActual (spec Table 3-1)", () => {
       ],
     });
 
-    const rows = await budgetVsActual("2026-07", new Date(2026, 6, 1), new Date(2026, 7, 1));
+    const rows = await budgetVsActual(user.id, "2026-07", new Date(2026, 6, 1), new Date(2026, 7, 1));
     const byName = Object.fromEntries(rows.map((r) => [r.name, r]));
 
     expect(byName.Housing.budgeted).toBe(15_000_000);
@@ -65,12 +71,16 @@ describe("budgetVsActual (spec Table 3-1)", () => {
   });
 
   it("ignores paused budget lines", async () => {
+    const user = await createTestUser();
     const account = await prisma.account.create({
-      data: { name: "NCB", type: "checking", currency: "JMD", openingBalance: 0n, currentBalance: 0n },
+      data: { userId: user.id, name: "NCB", type: "checking", currency: "JMD", openingBalance: 0n, currentBalance: 0n },
     });
-    const cat = await prisma.category.create({ data: { name: "Housing", kind: "expense" } });
+    const cat = await prisma.category.create({
+      data: { userId: user.id, name: "Housing", kind: "expense" },
+    });
     await prisma.budgetLine.create({
       data: {
+        userId: user.id,
         name: "Rent",
         categoryId: cat.id,
         amount: 15_000_000n,
@@ -81,7 +91,7 @@ describe("budgetVsActual (spec Table 3-1)", () => {
         active: false,
       },
     });
-    const rows = await budgetVsActual("2026-07", new Date(2026, 6, 1), new Date(2026, 7, 1));
+    const rows = await budgetVsActual(user.id, "2026-07", new Date(2026, 6, 1), new Date(2026, 7, 1));
     expect(rows).toHaveLength(0);
   });
 });
@@ -91,8 +101,9 @@ describe("monthlyIncomeExpense", () => {
   afterAll(() => prisma.$disconnect());
 
   it("buckets by month per currency, excluding transfers and pending", async () => {
+    const user = await createTestUser();
     const account = await prisma.account.create({
-      data: { name: "NCB", type: "checking", currency: "JMD", openingBalance: 0n, currentBalance: 0n },
+      data: { userId: user.id, name: "NCB", type: "checking", currency: "JMD", openingBalance: 0n, currentBalance: 0n },
     });
     const now = new Date();
     const thisMonth = new Date(now.getFullYear(), now.getMonth(), 5);
@@ -104,7 +115,7 @@ describe("monthlyIncomeExpense", () => {
         { accountId: account.id, amount: -999_999n, occurredAt: thisMonth, status: "pending_review" },
       ],
     });
-    const result = await monthlyIncomeExpense(6);
+    const result = await monthlyIncomeExpense(user.id, 6);
     const jmd = result.get("JMD")!;
     expect(jmd).toHaveLength(6); // continuous axis
     const current = jmd[jmd.length - 1];

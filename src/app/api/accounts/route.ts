@@ -1,17 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { toAccountDTO } from "@/lib/accounts";
 import { accountInput } from "@/lib/validation";
 import { majorToMinor } from "@/lib/money";
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const includeArchived = req.nextUrl.searchParams.get("includeArchived") === "1";
   const accounts = await prisma.account.findMany({
-    where: includeArchived ? {} : { archived: false },
+    where: { userId, ...(includeArchived ? {} : { archived: false }) },
     include: { loanDetails: true },
     orderBy: [{ archived: "asc" }, { createdAt: "asc" }],
   });
@@ -19,8 +19,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const parsed = accountInput.safeParse(await req.json());
   if (!parsed.success) {
@@ -34,6 +34,7 @@ export async function POST(req: NextRequest) {
 
   const account = await prisma.account.create({
     data: {
+      userId,
       name: data.name,
       type: data.type,
       currency: data.currency,

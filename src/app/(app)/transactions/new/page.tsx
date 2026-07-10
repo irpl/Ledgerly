@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { requireUserId } from "@/lib/current-user";
 import { toAccountDTO } from "@/lib/accounts";
 import type { CategoryDTO, CategoryKindValue } from "@/lib/category-shared";
 import { TransactionForm } from "@/components/transaction-form";
@@ -6,13 +7,17 @@ import { TransactionForm } from "@/components/transaction-form";
 export const dynamic = "force-dynamic";
 
 export default async function NewTransactionPage() {
+  const userId = await requireUserId();
   const [accounts, categories] = await Promise.all([
     prisma.account.findMany({
-      where: { archived: false },
+      where: { userId, archived: false },
       include: { loanDetails: true },
       orderBy: { createdAt: "asc" },
     }),
-    prisma.category.findMany({ orderBy: [{ kind: "asc" }, { name: "asc" }] }),
+    prisma.category.findMany({
+      where: { userId },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+    }),
   ]);
 
   const categoryDTOs: CategoryDTO[] = categories.map((c) => ({

@@ -23,8 +23,9 @@ then starts Next.js on port 3000.
 | `AUTH_SECRET` | 32+ random bytes (`openssl rand -base64 32`) |
 | `APP_BASE_URL` | `https://your-domain` |
 | `INBOUND_EMAIL_SECRET` | strong random string for the email webhook |
+| `INBOUND_EMAIL_DOMAIN` | inbound mail domain (e.g. `bank.your-domain`) — shown on Settings as each user's per-user inbound address |
 | `REPORTING_CURRENCY` | `JMD` |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | your login |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | admin login (seed marks this user `role=admin`) |
 | `AUTH_TRUST_HOST` | `true` (Auth.js behind Coolify's proxy) |
 
 ## 4. Domain + SSL

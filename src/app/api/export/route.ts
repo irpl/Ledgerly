@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { minorToMajor } from "@/lib/money";
 
@@ -20,9 +20,13 @@ function money(minor: bigint | null): string {
   return minor === null ? "" : minorToMajor(Number(minor)).toFixed(2);
 }
 
-const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown[][] }>> = {
-  accounts: async () => {
+const EXPORTERS: Record<
+  string,
+  (userId: string) => Promise<{ headers: string[]; rows: unknown[][] }>
+> = {
+  accounts: async (userId) => {
     const items = await prisma.account.findMany({
+      where: { userId },
       include: { loanDetails: true },
       orderBy: { createdAt: "asc" },
     });
@@ -37,8 +41,11 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
       ]),
     };
   },
-  loans: async () => {
-    const items = await prisma.loanDetails.findMany({ include: { account: true } });
+  loans: async (userId) => {
+    const items = await prisma.loanDetails.findMany({
+      where: { account: { userId } },
+      include: { account: true },
+    });
     return {
       headers: [
         "accountId", "accountName", "loanKind", "originalPrincipal", "interestRate",
@@ -52,8 +59,9 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
       ]),
     };
   },
-  transactions: async () => {
+  transactions: async (userId) => {
     const items = await prisma.transaction.findMany({
+      where: { account: { userId } },
       include: { account: true, category: true, vendor: true },
       orderBy: { occurredAt: "asc" },
     });
@@ -69,15 +77,19 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
       ]),
     };
   },
-  categories: async () => {
-    const items = await prisma.category.findMany({ orderBy: [{ kind: "asc" }, { name: "asc" }] });
+  categories: async (userId) => {
+    const items = await prisma.category.findMany({
+      where: { userId },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+    });
     return {
       headers: ["id", "name", "kind", "parentId", "color", "icon", "isDefault"],
       rows: items.map((c) => [c.id, c.name, c.kind, c.parentId, c.color, c.icon, c.isDefault]),
     };
   },
-  vendors: async () => {
+  vendors: async (userId) => {
     const items = await prisma.vendor.findMany({
+      where: { userId },
       include: { defaultCategory: true },
       orderBy: { name: "asc" },
     });
@@ -88,8 +100,9 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
       ]),
     };
   },
-  "budget-lines": async () => {
+  "budget-lines": async (userId) => {
     const items = await prisma.budgetLine.findMany({
+      where: { userId },
       include: { category: true, fundingAccount: true },
       orderBy: { name: "asc" },
     });
@@ -104,15 +117,19 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
       ]),
     };
   },
-  "income-plan": async () => {
-    const items = await prisma.incomePlan.findMany({ orderBy: { label: "asc" } });
+  "income-plan": async (userId) => {
+    const items = await prisma.incomePlan.findMany({
+      where: { userId },
+      orderBy: { label: "asc" },
+    });
     return {
       headers: ["id", "label", "monthlyAmount"],
       rows: items.map((i) => [i.id, i.label, money(i.monthlyAmount)]),
     };
   },
-  "budget-actuals": async () => {
+  "budget-actuals": async (userId) => {
     const items = await prisma.budgetPeriodActual.findMany({
+      where: { category: { userId } },
       include: { category: true },
       orderBy: [{ periodLabel: "asc" }, { categoryId: "asc" }],
     });
@@ -121,8 +138,9 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
       rows: items.map((b) => [b.periodLabel, b.category.name, money(b.budgeted), money(b.spent)]),
     };
   },
-  "parser-rules": async () => {
+  "parser-rules": async (userId) => {
     const items = await prisma.parserRule.findMany({
+      where: { userId },
       include: { account: true },
       orderBy: { name: "asc" },
     });
@@ -133,8 +151,11 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
       ]),
     };
   },
-  "raw-emails": async () => {
-    const items = await prisma.rawEmail.findMany({ orderBy: { receivedAt: "asc" } });
+  "raw-emails": async (userId) => {
+    const items = await prisma.rawEmail.findMany({
+      where: { userId },
+      orderBy: { receivedAt: "asc" },
+    });
     return {
       headers: ["id", "fromAddress", "subject", "receivedAt", "parseStatus", "createdTransactionId", "body"],
       rows: items.map((e) => [
@@ -146,8 +167,8 @@ const EXPORTERS: Record<string, () => Promise<{ headers: string[]; rows: unknown
 };
 
 export async function GET(req: NextRequest) {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const entity = req.nextUrl.searchParams.get("entity") ?? "";
   const exporter = EXPORTERS[entity];
@@ -157,7 +178,7 @@ export async function GET(req: NextRequest) {
       { status: 400 }
     );
   }
-  const { headers, rows } = await exporter();
+  const { headers, rows } = await exporter(userId);
   const stamp = new Date().toISOString().slice(0, 10);
   return new NextResponse(toCsv(headers, rows), {
     headers: {

@@ -1,21 +1,21 @@
 import { NextResponse } from "next/server";
-import { auth } from "@/lib/auth";
+import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { toTransactionDTO } from "@/lib/transactions";
 
 /** The review queue: pending email transactions + emails that need attention. */
 export async function GET() {
-  const session = await auth();
-  if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const userId = await getUserId();
+  if (!userId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const [pending, emails] = await Promise.all([
     prisma.transaction.findMany({
-      where: { status: "pending_review" },
+      where: { status: "pending_review", account: { userId } },
       include: { account: true, category: true, vendor: true, rawEmail: true },
       orderBy: { createdAt: "desc" },
     }),
     prisma.rawEmail.findMany({
-      where: { parseStatus: { in: ["unparsed", "failed"] } },
+      where: { userId, parseStatus: { in: ["unparsed", "failed"] } },
       orderBy: { receivedAt: "desc" },
     }),
   ]);

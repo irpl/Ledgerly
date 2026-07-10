@@ -9,6 +9,9 @@ import { ingestInboundEmail, rateLimited, secretMatches } from "@/lib/inbound-em
 
 const postmarkInput = z.object({
   From: z.string().trim().min(1).max(500),
+  To: z.string().trim().max(500).nullish(),
+  // The actual delivery address (survives forwarding), preferred over To.
+  OriginalRecipient: z.string().trim().max(500).nullish(),
   Subject: z.string().trim().max(1000).default(""),
   TextBody: z.string().max(200_000).nullish(),
   HtmlBody: z.string().max(500_000).nullish(),
@@ -34,6 +37,7 @@ export async function POST(req: NextRequest) {
 
   const { id, outcome } = await ingestInboundEmail({
     from: data.From,
+    to: data.OriginalRecipient || data.To || null,
     subject: data.Subject,
     text: data.TextBody,
     html: data.HtmlBody,

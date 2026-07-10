@@ -1,63 +1,36 @@
 import "dotenv/config";
 import bcrypt from "bcryptjs";
-import { PrismaClient, CategoryKind } from "../src/generated/prisma/client";
+import { PrismaClient } from "../src/generated/prisma/client";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { createDefaultCategories } from "../src/lib/default-categories";
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
-const EXPENSE_GROUPS = [
-  "Housing",
-  "Food",
-  "Transportation",
-  "Loans",
-  "Insurance",
-  "Health and Beauty",
-  "Personal Spending",
-  "Savings and Investments",
-  "Miscellaneous",
-  "Entertainment",
-  "Credit Card",
-];
-
-const INCOME_GROUPS = ["Salary", "Other Income"];
-
 async function main() {
-  // Single user from env
+  // Admin user from env
   const email = process.env.ADMIN_EMAIL;
   const password = process.env.ADMIN_PASSWORD;
   if (!email || !password) {
     throw new Error("ADMIN_EMAIL and ADMIN_PASSWORD must be set");
   }
   const passwordHash = await bcrypt.hash(password, 12);
-  await prisma.user.upsert({
+  const admin = await prisma.user.upsert({
     where: { email },
-    update: { passwordHash },
-    create: { email, passwordHash },
+    update: { passwordHash, role: "admin" },
+    create: { email, passwordHash, role: "admin" },
   });
-  console.log(`User ready: ${email}`);
+  console.log(`Admin user ready: ${email}`);
 
-  // Default categories (editable/deletable by the user)
-  for (const name of EXPENSE_GROUPS) {
-    await prisma.category.upsert({
-      where: { name_kind: { name, kind: CategoryKind.expense } },
-      update: {},
-      create: { name, kind: CategoryKind.expense, isDefault: true },
-    });
+  // Default categories for the admin — count-guarded so reboots never
+  // resurrect categories the user deliberately deleted.
+  const categoryCount = await prisma.category.count({ where: { userId: admin.id } });
+  if (categoryCount === 0) {
+    await createDefaultCategories(prisma, admin.id);
+    console.log("Default categories created for admin");
+  } else {
+    console.log("Categories already present, skipping");
   }
-  for (const name of INCOME_GROUPS) {
-    await prisma.category.upsert({
-      where: { name_kind: { name, kind: CategoryKind.income } },
-      update: {},
-      create: { name, kind: CategoryKind.income, isDefault: true },
-    });
-  }
-  await prisma.category.upsert({
-    where: { name_kind: { name: "Transfer", kind: CategoryKind.both } },
-    update: {},
-    create: { name: "Transfer", kind: CategoryKind.both, isDefault: true },
-  });
-  console.log("Categories seeded");
 
   // Example FX rate (only used if the optional combined view is enabled)
   const asOf = new Date();
