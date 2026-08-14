@@ -9,10 +9,14 @@ export function majorToMinor(major: number): number {
   return Math.round(major * 100);
 }
 
+/**
+ * `code: false` drops the trailing currency code — for tables that state the
+ * currency once in the column header instead of on every row.
+ */
 export function formatMoney(
   minor: bigint | number,
   currency: string,
-  opts?: { sign?: boolean }
+  opts?: { sign?: boolean; code?: boolean }
 ): string {
   const value = minorToMajor(minor);
   const formatted = new Intl.NumberFormat("en-JM", {
@@ -21,7 +25,8 @@ export function formatMoney(
     currencyDisplay: "narrowSymbol",
   }).format(Math.abs(value));
   const prefix = value < 0 ? "-" : opts?.sign && value > 0 ? "+" : "";
-  return `${prefix}${formatted} ${currency}`;
+  const suffix = opts?.code === false ? "" : ` ${currency}`;
+  return `${prefix}${formatted}${suffix}`;
 }
 
 /** CSS class for signed amounts: negative red, positive green. */

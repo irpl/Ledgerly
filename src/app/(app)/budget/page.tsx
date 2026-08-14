@@ -6,7 +6,7 @@ import type { CategoryDTO, CategoryKindValue } from "@/lib/category-shared";
 import type { IncomePlanDTO } from "@/lib/budget-shared";
 import { formatMoney, amountClass } from "@/lib/money";
 import { BudgetManager } from "@/components/budget-manager";
-import { BudgetActualMeters } from "@/components/budget-actual-meters";
+import { BudgetActualTable } from "@/components/budget-actual-table";
 import { budgetVsActual } from "@/lib/analytics";
 import { monthLabel, parseMonthLabel } from "@/lib/period";
 import { requireUserId } from "@/lib/current-user";
@@ -149,8 +149,8 @@ export default async function BudgetPage(props: {
             </Link>
           </div>
         </div>
-        <div className="card">
-          <BudgetActualMeters rows={actualRows} currency={REPORTING_CURRENCY} />
+        <div className="card p-0! overflow-hidden">
+          <BudgetActualTable rows={actualRows} currency={REPORTING_CURRENCY} />
         </div>
       </section>
 

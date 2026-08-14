@@ -172,15 +172,21 @@ function LineForm({
   );
 }
 
+/** Name, Category, Frequency, Paid by, Account, Amount, Monthly, Actions. */
+const BUDGET_LINE_COLUMNS = 8;
+
 function BudgetLineRow({
   line,
   categories,
   accounts,
+  showCurrency,
   onChanged,
 }: {
   line: BudgetLineDTO;
   categories: CategoryDTO[];
   accounts: AccountDTO[];
+  /** False when the column header already states the currency. */
+  showCurrency: boolean;
   onChanged: () => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -233,80 +239,88 @@ function BudgetLineRow({
 
   if (editing) {
     return (
-      <li className="p-4 space-y-2">
-        <LineForm
-          categories={categories}
-          accounts={accounts}
-          initial={{
-            name: line.name,
-            categoryId: line.categoryId,
-            amountStr: String(minorToMajor(line.amount)),
-            frequency: line.frequency,
-            paymentMethod: line.paymentMethod,
-            fundingAccountId: line.fundingAccountId,
-          }}
-          submitLabel="Save"
-          busy={busy}
-          onSubmit={save}
-          onCancel={() => setEditing(false)}
-        />
-        {error && <p className="text-sm text-negative">{error}</p>}
-      </li>
+      <tr>
+        <td colSpan={BUDGET_LINE_COLUMNS} className="p-4 space-y-2">
+          <LineForm
+            categories={categories}
+            accounts={accounts}
+            initial={{
+              name: line.name,
+              categoryId: line.categoryId,
+              amountStr: String(minorToMajor(line.amount)),
+              frequency: line.frequency,
+              paymentMethod: line.paymentMethod,
+              fundingAccountId: line.fundingAccountId,
+            }}
+            submitLabel="Save"
+            busy={busy}
+            onSubmit={save}
+            onCancel={() => setEditing(false)}
+          />
+          {error && <p className="text-sm text-negative">{error}</p>}
+        </td>
+      </tr>
     );
   }
 
   return (
-    <li className={`flex items-center justify-between gap-3 p-3 ${line.active ? "" : "opacity-50"}`}>
-      <div className="min-w-0">
-        <div className="text-sm font-medium truncate">
-          {line.name}
-          {!line.active && (
-            <span className="ml-2 text-xs rounded bg-surface-raised px-1.5 py-0.5 text-muted">
-              paused
-            </span>
-          )}
+    <tr
+      className={`hover:bg-surface-raised transition-colors duration-150 ${
+        line.active ? "" : "opacity-50"
+      }`}
+    >
+      <td className="p-3">
+        <span className="font-medium">{line.name}</span>
+        {!line.active && (
+          <span className="ml-2 text-xs rounded bg-surface-raised px-1.5 py-0.5 text-muted">
+            paused
+          </span>
+        )}
+      </td>
+      <td className="p-3 text-muted">{line.categoryName}</td>
+      <td className="p-3 text-muted">{FREQUENCY_LABELS[line.frequency]}</td>
+      <td className="p-3 text-muted">{line.paymentMethod === "cash" ? "Cash" : "Credit"}</td>
+      <td className="p-3 text-muted">{line.fundingAccountName}</td>
+      <td className="p-3 text-right amount whitespace-nowrap">
+        {formatMoney(line.amount, line.fundingAccountCurrency, { code: showCurrency })}
+      </td>
+      <td className="p-3 text-right font-semibold amount whitespace-nowrap">
+        {formatMoney(line.normalizedMonthly, line.fundingAccountCurrency, {
+          code: showCurrency,
+        })}
+      </td>
+      <td className="p-3">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={toggleActive}
+            disabled={busy}
+            className="btn-ghost px-2.5! py-1.5! text-xs"
+          >
+            {line.active ? "Pause" : "Resume"}
+          </button>
+          <button
+            onClick={() => setEditing(true)}
+            className="btn-ghost p-2!"
+            aria-label={`Edit ${line.name}`}
+          >
+            <Pencil size={15} aria-hidden />
+          </button>
+          <button
+            onClick={remove}
+            disabled={busy}
+            className="btn-danger p-2!"
+            aria-label={`Delete ${line.name}`}
+          >
+            <Trash2 size={15} aria-hidden />
+          </button>
         </div>
-        <div className="text-xs text-muted truncate">
-          {line.categoryName} · {FREQUENCY_LABELS[line.frequency]} ·{" "}
-          {line.paymentMethod === "cash" ? "Cash" : "Credit"} · {line.fundingAccountName}
-        </div>
-      </div>
-      <div className="flex items-center gap-3 shrink-0">
-        <div className="text-right">
-          <div className="text-sm font-semibold amount">
-            {formatMoney(line.normalizedMonthly, line.fundingAccountCurrency)}/mo
-          </div>
-          <div className="text-xs text-muted amount">
-            {formatMoney(line.amount, line.fundingAccountCurrency)}{" "}
-            {FREQUENCY_LABELS[line.frequency].toLowerCase()}
-          </div>
-        </div>
-        <button
-          onClick={toggleActive}
-          disabled={busy}
-          className="btn-ghost px-2.5! py-1.5! text-xs"
-        >
-          {line.active ? "Pause" : "Resume"}
-        </button>
-        <button
-          onClick={() => setEditing(true)}
-          className="btn-ghost p-2!"
-          aria-label={`Edit ${line.name}`}
-        >
-          <Pencil size={15} aria-hidden />
-        </button>
-        <button
-          onClick={remove}
-          disabled={busy}
-          className="btn-danger p-2!"
-          aria-label={`Delete ${line.name}`}
-        >
-          <Trash2 size={15} aria-hidden />
-        </button>
-      </div>
-    </li>
+      </td>
+    </tr>
   );
 }
+
+/** Label, Monthly, Actions. */
+const INCOME_COLUMNS = 3;
 
 function IncomeRow({ item, onChanged }: { item: IncomePlanDTO; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);
@@ -339,55 +353,59 @@ function IncomeRow({ item, onChanged }: { item: IncomePlanDTO; onChanged: () => 
 
   if (editing) {
     return (
-      <li className="p-3">
-        <form onSubmit={save} className="flex items-end gap-2">
-          <div className="flex-1">
-            <label className="label">Label</label>
-            <input required value={label} onChange={(e) => setLabel(e.target.value)} className="input" />
-          </div>
-          <div className="w-40">
-            <label className="label">Monthly</label>
-            <input
-              required
-              type="number"
-              step="0.01"
-              min="0"
-              inputMode="decimal"
-              value={amountStr}
-              onChange={(e) => setAmountStr(e.target.value)}
-              className="input amount"
-            />
-          </div>
-          <button type="submit" disabled={busy} className="btn-primary">
-            Save
-          </button>
-          <button type="button" onClick={() => setEditing(false)} className="btn-ghost">
-            Cancel
-          </button>
-        </form>
-      </li>
+      <tr>
+        <td colSpan={INCOME_COLUMNS} className="p-3">
+          <form onSubmit={save} className="flex items-end gap-2">
+            <div className="flex-1">
+              <label className="label">Label</label>
+              <input required value={label} onChange={(e) => setLabel(e.target.value)} className="input" />
+            </div>
+            <div className="w-40">
+              <label className="label">Monthly</label>
+              <input
+                required
+                type="number"
+                step="0.01"
+                min="0"
+                inputMode="decimal"
+                value={amountStr}
+                onChange={(e) => setAmountStr(e.target.value)}
+                className="input amount"
+              />
+            </div>
+            <button type="submit" disabled={busy} className="btn-primary">
+              Save
+            </button>
+            <button type="button" onClick={() => setEditing(false)} className="btn-ghost">
+              Cancel
+            </button>
+          </form>
+        </td>
+      </tr>
     );
   }
 
   return (
-    <li className="flex items-center justify-between gap-3 p-3">
-      <span className="text-sm font-medium">{item.label}</span>
-      <div className="flex items-center gap-3">
-        <span className="text-sm font-semibold amount amount-positive">
-          {formatMoney(item.monthlyAmount, "JMD")}/mo
-        </span>
-        <button
-          onClick={() => setEditing(true)}
-          className="btn-ghost p-2!"
-          aria-label={`Edit ${item.label}`}
-        >
-          <Pencil size={15} aria-hidden />
-        </button>
-        <button onClick={remove} disabled={busy} className="btn-danger p-2!" aria-label={`Delete ${item.label}`}>
-          <Trash2 size={15} aria-hidden />
-        </button>
-      </div>
-    </li>
+    <tr className="hover:bg-surface-raised transition-colors duration-150">
+      <td className="p-3 font-medium">{item.label}</td>
+      <td className="p-3 text-right font-semibold amount amount-positive whitespace-nowrap">
+        {formatMoney(item.monthlyAmount, "JMD", { code: false })}
+      </td>
+      <td className="p-3">
+        <div className="flex items-center justify-end gap-2">
+          <button
+            onClick={() => setEditing(true)}
+            className="btn-ghost p-2!"
+            aria-label={`Edit ${item.label}`}
+          >
+            <Pencil size={15} aria-hidden />
+          </button>
+          <button onClick={remove} disabled={busy} className="btn-danger p-2!" aria-label={`Delete ${item.label}`}>
+            <Trash2 size={15} aria-hidden />
+          </button>
+        </div>
+      </td>
+    </tr>
   );
 }
 
@@ -411,6 +429,20 @@ export function BudgetManager({
   const [incomeAmountStr, setIncomeAmountStr] = useState("");
 
   const refresh = () => router.refresh();
+
+  // With one currency across the table, the header states it once and the rows
+  // drop the code; a total row only makes sense in that case too.
+  const tableCurrencies = new Set(budgetLines.map((l) => l.fundingAccountCurrency));
+  const tableCurrency = tableCurrencies.size === 1 ? budgetLines[0].fundingAccountCurrency : null;
+  const activeLines = budgetLines.filter((l) => l.active);
+  const plannedTotal =
+    tableCurrency && activeLines.length > 0
+      ? {
+          amount: activeLines.reduce((sum, l) => sum + l.normalizedMonthly, 0),
+          currency: tableCurrency,
+        }
+      : null;
+  const incomeTotal = incomePlan.reduce((sum, i) => sum + i.monthlyAmount, 0);
 
   async function createLine(values: LineFormValues) {
     setBusy(true);
@@ -498,17 +530,54 @@ export function BudgetManager({
             No budget lines yet — add your recurring planned expenses.
           </p>
         ) : (
-          <ul className="card p-0! divide-y divide-border-subtle">
-            {budgetLines.map((line) => (
-              <BudgetLineRow
-                key={line.id}
-                line={line}
-                categories={categories}
-                accounts={accounts}
-                onChanged={refresh}
-              />
-            ))}
-          </ul>
+          <div className="card p-0! overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border-subtle text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="p-3 font-semibold">Name</th>
+                  <th className="p-3 font-semibold">Category</th>
+                  <th className="p-3 font-semibold">Frequency</th>
+                  <th className="p-3 font-semibold whitespace-nowrap">Paid by</th>
+                  <th className="p-3 font-semibold">Account</th>
+                  <th className="p-3 font-semibold text-right whitespace-nowrap">
+                    Amount{tableCurrency && ` (${tableCurrency})`}
+                  </th>
+                  <th className="p-3 font-semibold text-right whitespace-nowrap">
+                    Per month{tableCurrency && ` (${tableCurrency})`}
+                  </th>
+                  <th className="p-3" aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {budgetLines.map((line) => (
+                  <BudgetLineRow
+                    key={line.id}
+                    line={line}
+                    categories={categories}
+                    accounts={accounts}
+                    showCurrency={tableCurrency === null}
+                    onChanged={refresh}
+                  />
+                ))}
+              </tbody>
+              {plannedTotal && (
+                <tfoot>
+                  <tr className="border-t border-border-subtle">
+                    <td
+                      className="p-3 text-xs font-semibold uppercase tracking-wide text-muted"
+                      colSpan={6}
+                    >
+                      Total planned / mo
+                    </td>
+                    <td className="p-3 text-right font-semibold amount whitespace-nowrap">
+                      {formatMoney(plannedTotal.amount, plannedTotal.currency, { code: false })}
+                    </td>
+                    <td className="p-3" />
+                  </tr>
+                </tfoot>
+              )}
+            </table>
+          </div>
         )}
       </section>
 
@@ -569,11 +638,35 @@ export function BudgetManager({
             No planned income yet — add salary and other regular income.
           </p>
         ) : (
-          <ul className="card p-0! divide-y divide-border-subtle">
-            {incomePlan.map((item) => (
-              <IncomeRow key={item.id} item={item} onChanged={refresh} />
-            ))}
-          </ul>
+          <div className="card p-0! overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border-subtle text-left text-xs uppercase tracking-wide text-muted">
+                  <th className="p-3 font-semibold">Source</th>
+                  <th className="p-3 font-semibold text-right whitespace-nowrap">
+                    Per month (JMD)
+                  </th>
+                  <th className="p-3" aria-label="Actions" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border-subtle">
+                {incomePlan.map((item) => (
+                  <IncomeRow key={item.id} item={item} onChanged={refresh} />
+                ))}
+              </tbody>
+              <tfoot>
+                <tr className="border-t border-border-subtle">
+                  <td className="p-3 text-xs font-semibold uppercase tracking-wide text-muted">
+                    Total income / mo
+                  </td>
+                  <td className="p-3 text-right font-semibold amount amount-positive whitespace-nowrap">
+                    {formatMoney(incomeTotal, "JMD", { code: false })}
+                  </td>
+                  <td className="p-3" />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
         )}
       </section>
     </div>
