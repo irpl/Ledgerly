@@ -53,6 +53,26 @@ describe("resolveInboundUser (per-user email routing)", () => {
     expect(resolved).toBe(keyed.id);
   });
 
+  it("finds the key in any recipient, envelope first", async () => {
+    const user = await createTestUser();
+    // Forwarded alert: the key is only in the envelope recipient; the To:
+    // header still names the mailbox the bank originally sent to.
+    const resolved = await resolveInboundUser(
+      [`${user.inboundKey}@ledger.example.com`, "jan@gmail.com"],
+      "donotreply@alerts.bank.com"
+    );
+    expect(resolved).toBe(user.id);
+  });
+
+  it("ignores a To: header that carries no key", async () => {
+    const user = await createTestUser();
+    const resolved = await resolveInboundUser(
+      ["jan@gmail.com", `${user.inboundKey}@ledger.example.com`],
+      "donotreply@alerts.bank.com"
+    );
+    expect(resolved).toBe(user.id);
+  });
+
   it("returns null when nothing matches", async () => {
     await createTestUser();
     const resolved = await resolveInboundUser("bank@ledger.example.com", "stranger@example.com");
@@ -71,6 +91,20 @@ describe("ingestInboundEmail routing", () => {
       to: `${user.inboundKey}@ledger.example.com`,
       subject: "Alert",
       text: "hello",
+    });
+    const email = await prisma.rawEmail.findUniqueOrThrow({ where: { id } });
+    expect(email.userId).toBe(user.id);
+    expect(email.toAddress).toBe(`${user.inboundKey}@ledger.example.com`);
+  });
+
+  it("routes a forwarded alert by its envelope recipient", async () => {
+    const user = await createTestUser();
+    const { id } = await ingestInboundEmail({
+      from: "donotreply@alerts.bank.com",
+      envelopeTo: `${user.inboundKey}@ledger.example.com`,
+      to: "jan@gmail.com", // To: header survives forwarding unchanged
+      subject: "Transaction Alert",
+      text: "Your card was charged $10.00 JMD at SHOP, Jamaica.",
     });
     const email = await prisma.rawEmail.findUniqueOrThrow({ where: { id } });
     expect(email.userId).toBe(user.id);

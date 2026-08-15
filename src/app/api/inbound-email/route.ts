@@ -53,6 +53,10 @@ export async function POST(req: NextRequest) {
 
   const { id, outcome } = await ingestInboundEmail({
     from,
+    // `data.to` is the caller-supplied recipient — for the Cloudflare Worker
+    // that is the SMTP envelope recipient, which is where the inbound key
+    // lives on a forwarded alert. `mime.to` is only the To: header.
+    envelopeTo: data.to || null,
     to: mime?.to || data.to || null,
     subject: mime?.subject || data.subject || "",
     text: mime?.text ?? data.text,
