@@ -299,10 +299,22 @@ Available, Budget, Spent, Remaining**, plus a **Pay** action per row.
 Cash / Credit split), and **Surplus / Deficit / mo** (planned income − JMD
 planned expenses).
 
-**Budget vs actual:** a month navigator (`?month=YYYY-MM`, can't go past the
-current month) with one meter per category — `spent of budgeted`, with an
-explicit "over by {amount}" label (accessible; never color-only). Computing this
-also **persists** a `BudgetPeriodActual` snapshot.
+**Budget period (per user):** `User.budgetStartDay` (1–31, set on Settings →
+Budget period) anchors the period. `1` = calendar months, the default and the
+historical behaviour. Day 25 gives 25 Jul – 24 Aug, and so on. Anchors are
+clamped in short months (31 → 28 in February), which keeps consecutive periods
+gapless and non-overlapping. A period is still labelled `YYYY-MM` — the calendar
+month its **start** falls in — so `BudgetPeriodActual` snapshots and the
+`?month=` URL are unchanged. Helpers live in `src/lib/period.ts`
+(`resolveBudgetPeriod`, `parseBudgetPeriodLabel`, `shiftBudgetPeriod`,
+`formatBudgetPeriod`). The dashboard's This month / Last month presets still
+follow calendar months.
+
+**Budget vs actual:** a period navigator (`?month=YYYY-MM`, can't go past the
+current period; the literal date range is shown underneath when the anchor day
+isn't 1) with one meter per category — `spent of budgeted`, with an explicit
+"over by {amount}" label (accessible; never color-only). Computing this also
+**persists** a `BudgetPeriodActual` snapshot.
 
 **Budget lines (CRUD):** Name, Category (expense/both), Amount, **Frequency**,
 **Paid by** (Cash/Credit), **Funding account**. A live "≈ {amount}/mo" preview

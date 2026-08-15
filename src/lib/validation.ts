@@ -2,6 +2,7 @@ import { z } from "zod";
 import { ACCOUNT_TYPES, LOAN_KINDS } from "@/lib/account-shared";
 import { CATEGORY_KINDS } from "@/lib/category-shared";
 import { FREQUENCIES, PAYMENT_METHODS } from "@/lib/budget-shared";
+import { MAX_BUDGET_START_DAY, MIN_BUDGET_START_DAY } from "@/lib/period";
 
 // Amounts arrive from forms in major units (e.g. 1234.56) and are
 // converted to integer minor units at the API boundary.
@@ -149,6 +150,13 @@ export type ChangePasswordInput = z.infer<typeof changePasswordInput>;
 export const profileInput = z.object({
   email: z.string().trim().email().max(320).optional(),
   displayName: z.string().trim().max(100).nullish(),
+  // Anchor day for the budget period; 1 = calendar months.
+  budgetStartDay: z
+    .number()
+    .int()
+    .min(MIN_BUDGET_START_DAY)
+    .max(MAX_BUDGET_START_DAY)
+    .optional(),
 });
 
 export type ProfileInput = z.infer<typeof profileInput>;

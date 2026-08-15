@@ -8,30 +8,35 @@ import { formatMoney, amountClass } from "@/lib/money";
 import { BudgetManager } from "@/components/budget-manager";
 import { BudgetActualTable } from "@/components/budget-actual-table";
 import { budgetVsActual } from "@/lib/analytics";
-import { monthLabel, parseMonthLabel } from "@/lib/period";
+import {
+  formatBudgetPeriod,
+  parseBudgetPeriodLabel,
+  resolveBudgetPeriod,
+  shiftBudgetPeriod,
+} from "@/lib/period";
 import { requireUserId } from "@/lib/current-user";
 
 export const dynamic = "force-dynamic";
 
 const REPORTING_CURRENCY = process.env.REPORTING_CURRENCY ?? "JMD";
 
-function shiftMonth(label: string, delta: number): string {
-  const range = parseMonthLabel(label)!;
-  const d = new Date(range.start.getFullYear(), range.start.getMonth() + delta, 1);
-  return monthLabel(d);
-}
-
 export default async function BudgetPage(props: {
   searchParams: Promise<{ month?: string }>;
 }) {
   const userId = await requireUserId();
   const searchParams = await props.searchParams;
-  const currentLabel = monthLabel(new Date());
-  const selectedMonth =
-    searchParams.month && parseMonthLabel(searchParams.month)
-      ? searchParams.month
-      : currentLabel;
-  const monthRange = parseMonthLabel(selectedMonth)!;
+
+  // The period anchor is per-user (Settings → Budget period); 1 = calendar months.
+  const { budgetStartDay } = (await prisma.user.findUniqueOrThrow({
+    where: { id: userId },
+    select: { budgetStartDay: true },
+  }));
+  const currentPeriod = resolveBudgetPeriod(budgetStartDay);
+  const period =
+    (searchParams.month && parseBudgetPeriodLabel(searchParams.month, budgetStartDay)) ||
+    currentPeriod;
+  const selectedMonth = period.label;
+  const currentLabel = currentPeriod.label;
 
   const [lines, incomeRows, categories, accounts] = await Promise.all([
     prisma.budgetLine.findMany({
@@ -83,7 +88,7 @@ export default async function BudgetPage(props: {
   const reportingExpenses = byCurrency.get(REPORTING_CURRENCY)?.total ?? 0;
   const surplus = plannedIncome - reportingExpenses;
 
-  const actualRows = await budgetVsActual(userId, selectedMonth, monthRange.start, monthRange.end);
+  const actualRows = await budgetVsActual(userId, selectedMonth, period.start, period.end);
 
   return (
     <div className="space-y-8">
@@ -130,19 +135,26 @@ export default async function BudgetPage(props: {
           </h2>
           <div className="flex items-center gap-2 text-sm">
             <Link
-              href={`/budget?month=${shiftMonth(selectedMonth, -1)}`}
+              href={`/budget?month=${shiftBudgetPeriod(selectedMonth, -1)}`}
               className="btn-ghost px-2.5! py-1!"
-              aria-label="Previous month"
+              aria-label="Previous period"
             >
               ‹
             </Link>
-            <span className="font-medium amount">{selectedMonth}</span>
+            <span className="text-center">
+              <span className="font-medium amount block">{selectedMonth}</span>
+              {budgetStartDay !== 1 && (
+                <span className="text-xs text-muted block">
+                  {formatBudgetPeriod(period)}
+                </span>
+              )}
+            </span>
             <Link
-              href={`/budget?month=${shiftMonth(selectedMonth, 1)}`}
+              href={`/budget?month=${shiftBudgetPeriod(selectedMonth, 1)}`}
               className={`btn-ghost px-2.5! py-1! ${
                 selectedMonth >= currentLabel ? "pointer-events-none opacity-40" : ""
               }`}
-              aria-label="Next month"
+              aria-label="Next period"
               aria-disabled={selectedMonth >= currentLabel}
             >
               ›

@@ -5,6 +5,7 @@ import { requireUserId } from "@/lib/current-user";
 import { ProfileForm } from "@/components/settings/profile-form";
 import { PasswordForm } from "@/components/settings/password-form";
 import { InboundEmailCard } from "@/components/settings/inbound-email-card";
+import { BudgetPeriodForm } from "@/components/settings/budget-period-form";
 import { UserManagement, type ManagedUser } from "@/components/settings/user-management";
 
 export const dynamic = "force-dynamic";
@@ -33,6 +34,7 @@ export default async function SettingsPage() {
       displayName: true,
       role: true,
       inboundKey: true,
+      budgetStartDay: true,
       forwardAddresses: {
         select: { id: true, address: true },
         orderBy: { address: "asc" },
@@ -81,6 +83,13 @@ export default async function SettingsPage() {
           Password
         </h2>
         <PasswordForm />
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">
+          Budget period
+        </h2>
+        <BudgetPeriodForm initialStartDay={user.budgetStartDay} />
       </section>
 
       <section>

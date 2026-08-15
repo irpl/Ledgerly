@@ -10,6 +10,7 @@ const PROFILE_SELECT = {
   displayName: true,
   role: true,
   inboundKey: true,
+  budgetStartDay: true,
   forwardAddresses: { select: { id: true, address: true }, orderBy: { address: "asc" } },
 } satisfies Prisma.UserSelect;
 
@@ -41,6 +42,7 @@ export async function PATCH(req: NextRequest) {
       data: {
         email: data.email,
         displayName: data.displayName !== undefined ? data.displayName : undefined,
+        budgetStartDay: data.budgetStartDay,
       },
       select: PROFILE_SELECT,
     });
