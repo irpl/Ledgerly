@@ -85,6 +85,16 @@ body {
   color: var(--text-muted);
 }
 
+/* Mobile "More" sheet (nav.tsx) rising from the bottom bar. */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
