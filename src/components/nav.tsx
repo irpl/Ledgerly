@@ -59,11 +59,16 @@ function sidebarLinkClass(active: boolean) {
   }`;
 }
 
-export function SidebarNav() {
+export function SidebarNav({ version }: { version?: string }) {
   const pathname = usePathname();
   return (
     <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-border-subtle p-4 gap-1 min-h-dvh sticky top-0">
-      <div className="font-bold text-lg mb-4 px-2">Ledgerly</div>
+      <div className="mb-4 px-2">
+        <div className="font-bold text-lg leading-tight">Ledgerly</div>
+        {version && (
+          <div className="text-xs text-muted amount">v{version}</div>
+        )}
+      </div>
       {NAV_ITEMS.map(({ href, label, Icon }) => (
         <Link key={href} href={href} className={sidebarLinkClass(isActive(pathname, href))}>
           <Icon size={18} strokeWidth={2} aria-hidden />
