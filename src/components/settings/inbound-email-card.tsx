@@ -1,10 +1,59 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Trash2 } from "lucide-react";
+import { Check, Copy, Trash2 } from "lucide-react";
 
 type ForwardAddress = { id: string; address: string };
+
+/** Click the address or the button to copy it; "Copied" clears itself. */
+function CopyableAddress({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (!copied) return;
+    const timer = setTimeout(() => setCopied(false), 2000);
+    return () => clearTimeout(timer);
+  }, [copied]);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+    } catch {
+      // Clipboard needs a secure context; leave the text selectable instead.
+    }
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={copy}
+        title="Copy to clipboard"
+        aria-label={`Copy ${value} to clipboard`}
+        className="flex-1 min-w-0 text-left rounded-lg border border-border-strong bg-surface-raised px-3 py-2 cursor-pointer transition-colors duration-200 hover:bg-surface hover:border-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
+      >
+        <code className="amount text-sm text-secondary break-all">{value}</code>
+      </button>
+      <button
+        type="button"
+        onClick={copy}
+        aria-label={`Copy ${value} to clipboard`}
+        className="btn-ghost px-2.5! py-2! shrink-0"
+      >
+        {copied ? (
+          <Check size={15} className="text-positive" aria-hidden />
+        ) : (
+          <Copy size={15} aria-hidden />
+        )}
+      </button>
+      <span role="status" aria-live="polite" className="sr-only">
+        {copied ? "Address copied to clipboard" : ""}
+      </span>
+    </div>
+  );
+}
 
 export function InboundEmailCard({
   inboundKey,
@@ -50,12 +99,10 @@ export function InboundEmailCard({
         <div className="label">Your inbound address</div>
         {inboundDomain ? (
           <>
-            <code className="amount text-sm text-secondary break-all">
-              {inboundKey}@{inboundDomain}
-            </code>
+            <CopyableAddress value={`${inboundKey}@${inboundDomain}`} />
             <p className="mt-1 text-xs text-muted">
-              Bank alerts forwarded to this address are routed to your account
-              automatically. Plus-addressing works too (anything+{inboundKey}@
+              Click to copy. Bank alerts forwarded to this address are routed to your
+              account automatically. Plus-addressing works too (anything+{inboundKey}@
               {inboundDomain}).
             </p>
           </>
