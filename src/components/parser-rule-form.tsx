@@ -44,12 +44,15 @@ export function ParserRuleForm({
   accounts,
   initial,
   sampleBody,
+  ruleId,
   onDone,
   onCancel,
 }: {
   accounts: AccountDTO[];
   initial?: Partial<RuleFormValues>;
   sampleBody?: string;
+  /** When set, the form edits that rule instead of creating a new one. */
+  ruleId?: string;
   onDone: () => void;
   onCancel: () => void;
 }) {
@@ -74,8 +77,8 @@ export function ParserRuleForm({
     e.preventDefault();
     setBusy(true);
     setError(null);
-    const res = await fetch("/api/parser-rules", {
-      method: "POST",
+    const res = await fetch(ruleId ? `/api/parser-rules/${ruleId}` : "/api/parser-rules", {
+      method: ruleId ? "PATCH" : "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...values,
@@ -85,7 +88,7 @@ export function ParserRuleForm({
     setBusy(false);
     if (!res.ok) {
       const data = await res.json().catch(() => null);
-      setError(data?.error ?? "Failed to create rule.");
+      setError(data?.error ?? (ruleId ? "Failed to save rule." : "Failed to create rule."));
       return;
     }
     onDone();
@@ -183,7 +186,7 @@ export function ParserRuleForm({
 
       <div className="flex gap-3">
         <button type="submit" disabled={busy} className="btn-primary">
-          {busy ? "Saving…" : "Create rule"}
+          {busy ? "Saving…" : ruleId ? "Save changes" : "Create rule"}
         </button>
         <button type="button" onClick={onCancel} className="btn-ghost">
           Cancel

@@ -72,6 +72,7 @@ export default async function ReviewPage() {
     subjectPattern: r.subjectPattern,
     bodyPattern: r.bodyPattern,
     defaultDirection: r.defaultDirection,
+    accountId: r.accountId,
     accountName: r.account.name,
   }));
 

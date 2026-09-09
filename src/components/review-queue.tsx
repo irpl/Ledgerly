@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Check, Trash2, RefreshCw, EyeOff, Plus } from "lucide-react";
+import { Check, Trash2, RefreshCw, EyeOff, Plus, Pencil, ChevronDown } from "lucide-react";
 import type { AccountDTO } from "@/lib/account-shared";
 import type { TransactionDTO } from "@/lib/transaction-shared";
 import { formatMoney, amountClass } from "@/lib/money";
@@ -29,6 +29,7 @@ export type RuleItem = {
   subjectPattern: string | null;
   bodyPattern: string;
   defaultDirection: string;
+  accountId: string;
   accountName: string;
 };
 
@@ -194,8 +195,27 @@ function EmailRow({
   );
 }
 
-function RuleRow({ rule, onChanged }: { rule: RuleItem; onChanged: () => void }) {
+function RuleDetail({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div>
+      <div className="label">{label}</div>
+      <div className={`text-xs break-all ${mono ? "amount" : ""}`}>{value}</div>
+    </div>
+  );
+}
+
+function RuleRow({
+  rule,
+  accounts,
+  onChanged,
+}: {
+  rule: RuleItem;
+  accounts: AccountDTO[];
+  onChanged: () => void;
+}) {
   const [busy, setBusy] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function remove() {
     if (!window.confirm(`Delete rule "${rule.name}"?`)) return;
@@ -206,18 +226,105 @@ function RuleRow({ rule, onChanged }: { rule: RuleItem; onChanged: () => void })
   }
 
   return (
-    <li className="flex items-center justify-between gap-3 p-3">
-      <div className="min-w-0">
-        <div className="text-sm font-medium truncate">{rule.name}</div>
-        <div className="text-xs text-muted truncate">
-          {rule.senderMatch} → {rule.accountName} ·{" "}
-          {rule.defaultDirection === "outflow" ? "out" : "in"} by default
+    <li className="p-3 space-y-2">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setExpanded((s) => !s)}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-start gap-2 text-left cursor-pointer group"
+        >
+          <ChevronDown
+            size={15}
+            aria-hidden
+            className={`mt-0.5 shrink-0 text-muted transition-transform duration-200 group-hover:text-foreground motion-reduce:transition-none ${
+              expanded ? "rotate-0" : "-rotate-90"
+            }`}
+          />
+          <span className="min-w-0">
+            <span className="block text-sm font-medium truncate transition-colors group-hover:text-accent">
+              {rule.name}
+            </span>
+            <span className="block text-xs text-muted truncate">
+              {rule.senderMatch} → {rule.accountName} ·{" "}
+              {rule.defaultDirection === "outflow" ? "out" : "in"} by default
+            </span>
+            {!expanded && (
+              <span className="block text-xs text-muted amount truncate mt-0.5">
+                {rule.bodyPattern}
+              </span>
+            )}
+          </span>
+        </button>
+        <div className="flex shrink-0 gap-2">
+          <button
+            onClick={() => {
+              setEditing((s) => !s);
+              setExpanded(true);
+            }}
+            disabled={busy}
+            className="btn-ghost p-2!"
+            aria-label={`Edit ${rule.name}`}
+          >
+            <Pencil size={15} aria-hidden />
+          </button>
+          <button
+            onClick={remove}
+            disabled={busy}
+            className="btn-danger p-2!"
+            aria-label={`Delete ${rule.name}`}
+          >
+            <Trash2 size={15} aria-hidden />
+          </button>
         </div>
-        <div className="text-xs text-muted amount truncate mt-0.5">{rule.bodyPattern}</div>
       </div>
-      <button onClick={remove} disabled={busy} className="btn-danger p-2! shrink-0" aria-label={`Delete ${rule.name}`}>
-        <Trash2 size={15} aria-hidden />
-      </button>
+
+      {expanded && !editing && (
+        <div className="rounded-lg border border-border-subtle p-3 space-y-2">
+          <div className="grid gap-2 sm:grid-cols-2">
+            <RuleDetail label="Rule name" value={rule.name} />
+            <RuleDetail label="Sender contains" value={rule.senderMatch} mono />
+            <RuleDetail label="Subject pattern" value={rule.subjectPattern ?? "— (any subject)"} mono />
+            <RuleDetail label="Account" value={rule.accountName} />
+            <RuleDetail
+              label="Default direction"
+              value={rule.defaultDirection === "outflow" ? "Money out" : "Money in"}
+            />
+          </div>
+          <div>
+            <div className="label">Body pattern</div>
+            <pre className="amount mt-1 whitespace-pre-wrap break-all rounded-lg bg-surface-raised p-3 text-xs">
+              {rule.bodyPattern}
+            </pre>
+          </div>
+          <button onClick={() => setEditing(true)} className="btn-ghost px-3! py-1.5! text-xs">
+            <Pencil size={14} aria-hidden />
+            Edit rule
+          </button>
+        </div>
+      )}
+
+      {editing && (
+        <div className="rounded-lg border border-border-subtle p-3">
+          <ParserRuleForm
+            accounts={accounts}
+            ruleId={rule.id}
+            initial={{
+              name: rule.name,
+              senderMatch: rule.senderMatch,
+              subjectPattern: rule.subjectPattern ?? "",
+              bodyPattern: rule.bodyPattern,
+              accountId: rule.accountId,
+              defaultDirection: rule.defaultDirection === "inflow" ? "inflow" : "outflow",
+            }}
+            onDone={() => {
+              setEditing(false);
+              onChanged();
+            }}
+            onCancel={() => setEditing(false)}
+          />
+        </div>
+      )}
     </li>
   );
 }
@@ -299,7 +406,7 @@ export function ReviewQueue({
         ) : (
           <ul className="card p-0! divide-y divide-border-subtle">
             {rules.map((rule) => (
-              <RuleRow key={rule.id} rule={rule} onChanged={refresh} />
+              <RuleRow key={rule.id} rule={rule} accounts={accounts} onChanged={refresh} />
             ))}
           </ul>
         )}
