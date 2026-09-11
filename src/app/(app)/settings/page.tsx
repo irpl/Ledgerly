@@ -1,4 +1,5 @@
 import { Download } from "lucide-react";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/current-user";
@@ -6,7 +7,9 @@ import { ProfileForm } from "@/components/settings/profile-form";
 import { PasswordForm } from "@/components/settings/password-form";
 import { InboundEmailCard } from "@/components/settings/inbound-email-card";
 import { BudgetPeriodForm } from "@/components/settings/budget-period-form";
+import { McpAccess } from "@/components/settings/mcp-access";
 import { UserManagement, type ManagedUser } from "@/components/settings/user-management";
+import { toApiTokenSummary } from "@/lib/api-tokens";
 
 export const dynamic = "force-dynamic";
 
@@ -42,6 +45,17 @@ export default async function SettingsPage() {
     },
   });
   if (!user) redirect("/login");
+
+  const apiTokens = (
+    await prisma.apiToken.findMany({ where: { userId }, orderBy: { createdAt: "desc" } })
+  ).map(toApiTokenSummary);
+
+  // The MCP URL has to be the address the user's client will dial, which behind
+  // a proxy is the forwarded host, not the container's own.
+  const requestHeaders = await headers();
+  const host = requestHeaders.get("host");
+  const proto = requestHeaders.get("x-forwarded-proto") ?? "https";
+  const mcpUrl = host ? `${proto}://${host}/api/mcp` : "/api/mcp";
 
   const isAdmin = user.role === "admin";
   const managedUsers: ManagedUser[] = isAdmin
@@ -101,6 +115,13 @@ export default async function SettingsPage() {
           inboundDomain={process.env.INBOUND_EMAIL_DOMAIN ?? null}
           forwardAddresses={user.forwardAddresses}
         />
+      </section>
+
+      <section>
+        <h2 className="text-sm font-semibold text-muted uppercase tracking-wide mb-3">
+          Claude / MCP access
+        </h2>
+        <McpAccess tokens={apiTokens} mcpUrl={mcpUrl} />
       </section>
 
       <section>

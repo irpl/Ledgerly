@@ -15,17 +15,17 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  role         Role     @default(user)
-  displayName  String?
+  id             String   @id @default(cuid())
+  email          String   @unique
+  passwordHash   String
+  role           Role     @default(user)
+  displayName    String?
   // Local-part token for per-user inbound email routing (key@domain or catch+key@domain).
-  inboundKey   String   @unique @default(cuid())
+  inboundKey     String   @unique @default(cuid())
   // Day of month the budget period starts on (1-31, clamped to short months).
   // 1 = calendar months, the historical behaviour.
-  budgetStartDay Int    @default(1)
-  createdAt    DateTime @default(now())
+  budgetStartDay Int      @default(1)
+  createdAt      DateTime @default(now())
 
   accounts         Account[]
   categories       Category[]
@@ -35,6 +35,7 @@ model User {
   incomePlans      IncomePlan[]
   rawEmails        RawEmail[]
   forwardAddresses ForwardAddress[]
+  apiTokens        ApiToken[]
 }
 
 // Sender addresses (e.g. the user's own mailbox for manual forwards) that route
@@ -45,6 +46,34 @@ model ForwardAddress {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   address   String   @unique // normalized: lowercase bare address
   createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ---------- API tokens (MCP / programmatic access) ----------
+
+enum ApiTokenScope {
+  // Read-only tools: nothing that writes to the database.
+  read
+  // Everything a signed-in user can do through the MCP server.
+  full
+}
+
+// Bearer credential for /api/mcp. Only the SHA-256 hash is stored — the
+// plaintext secret is shown once, at creation, and is unrecoverable after.
+model ApiToken {
+  id         String        @id @default(cuid())
+  userId     String
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name       String
+  // Hex SHA-256 of the full token; unique so lookup is a single indexed read.
+  tokenHash  String        @unique
+  // Leading characters of the token, shown in the UI to tell tokens apart.
+  prefix     String
+  scope      ApiTokenScope @default(full)
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  createdAt  DateTime      @default(now())
 
   @@index([userId])
 }
@@ -64,22 +93,22 @@ enum AccountType {
 }
 
 model Account {
-  id             String       @id @default(cuid())
+  id             String      @id @default(cuid())
   userId         String
-  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user           User        @relation(fields: [userId], references: [id], onDelete: Cascade)
   name           String
   type           AccountType
-  currency       String       @default("JMD")
+  currency       String      @default("JMD")
   // Money is stored as signed integer minor units (cents).
-  openingBalance BigInt       @default(0)
-  currentBalance BigInt       @default(0)
+  openingBalance BigInt      @default(0)
+  currentBalance BigInt      @default(0)
   creditLimit    BigInt?
   // Planned monthly spend/payment for liability accounts (§5.7 table).
   monthlyBudget  BigInt?
   color          String?
   icon           String?
-  archived       Boolean      @default(false)
-  createdAt      DateTime     @default(now())
+  archived       Boolean     @default(false)
+  createdAt      DateTime    @default(now())
 
   loanDetails  LoanDetails?
   transactions Transaction[]

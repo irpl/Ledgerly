@@ -186,3 +186,15 @@ export const adminResetPasswordInput = z.object({
 });
 
 export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordInput>;
+
+// ---------- API tokens (MCP access) ----------
+
+export const apiTokenInput = z.object({
+  name: z.string().trim().min(1).max(100),
+  // read = the read-only MCP tools; full = everything the MCP server exposes.
+  scope: z.enum(["read", "full"]).default("full"),
+  // Optional lifetime. Null/omitted means the token lasts until revoked.
+  expiresInDays: z.number().int().min(1).max(3650).nullish(),
+});
+
+export type ApiTokenInput = z.infer<typeof apiTokenInput>;

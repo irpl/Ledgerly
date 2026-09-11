@@ -26,6 +26,13 @@ ingestion working end-to-end (Cloudflare Email Routing → Worker →
 | 5 | Dashboards/charts, period selector, budget-vs-actual (BudgetPeriodActual) | done |
 | 6 | Email ingestion: webhook, parser rules, review queue | done |
 | 7 | PWA (manifest/SW/offline), CSV export, Dockerfile + deploy docs | done |
+| 8 | MCP server: Claude connects with a personal token and manages the ledger | done |
+
+Phase 8 is beyond the original spec: `POST /api/mcp` exposes 37 tools over the
+Model Context Protocol, authenticated with personal bearer tokens managed in
+Settings → Claude / MCP access. Setup and the tool catalog are in
+`docs/mcp-server.md`. Deploying it needs the `20260911120000_api_tokens`
+migration, which `prisma migrate deploy` applies on container boot.
 
 The FX/combined-currency toggle (spec §3.1, optional, off by default) was
 intentionally **not** built — the `FxRate` table and seed exist; the toggle,

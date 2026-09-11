@@ -19,8 +19,10 @@ export default auth((req) => {
 
 export const config = {
   // Protect everything except auth routes, the inbound-email webhook
-  // (secured by shared secret), and static assets.
+  // (secured by shared secret), the MCP endpoint (bearer tokens — it must
+  // answer 401 to a client, not redirect it to an HTML login page), and
+  // static assets.
   matcher: [
-    "/((?!api/auth|api/inbound-email|_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|icons/|sw\\.js|offline).*)",
+    "/((?!api/auth|api/inbound-email|api/mcp|_next/static|_next/image|favicon\\.ico|manifest\\.webmanifest|icons/|sw\\.js|offline).*)",
   ],
 };
