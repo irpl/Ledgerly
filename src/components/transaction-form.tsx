@@ -33,6 +33,8 @@ export function TransactionForm({
 }) {
   const router = useRouter();
   const isEdit = !!transaction;
+  // Opened from Review via "Edit first": saving can confirm it in the same step.
+  const isPending = transaction?.status === "pending_review";
 
   const [direction, setDirection] = useState<Direction>(
     transaction ? (transaction.amount < 0 ? "out" : "in") : "out"
@@ -110,6 +112,9 @@ export function TransactionForm({
       setError("Pick an account.");
       return;
     }
+    const confirmAfterSave =
+      isPending &&
+      ((e.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null)?.value === "confirm";
     setSaving(true);
     const res = await fetch(isEdit ? `/api/transactions/${transaction.id}` : "/api/transactions", {
       method: isEdit ? "PATCH" : "POST",
@@ -125,13 +130,25 @@ export function TransactionForm({
         notes: notes || null,
       }),
     });
-    setSaving(false);
     if (!res.ok) {
+      setSaving(false);
       const data = await res.json().catch(() => null);
       setError(data?.error ?? "Something went wrong.");
       return;
     }
-    router.push("/transactions");
+    if (confirmAfterSave) {
+      const confirmRes = await fetch(`/api/transactions/${transaction!.id}/confirm`, {
+        method: "POST",
+      });
+      if (!confirmRes.ok) {
+        setSaving(false);
+        const data = await confirmRes.json().catch(() => null);
+        setError(`Changes saved, but confirming failed: ${data?.error ?? "unknown error"}.`);
+        return;
+      }
+    }
+    setSaving(false);
+    router.push(isPending ? "/review" : "/transactions");
     router.refresh();
   }
 
@@ -322,10 +339,26 @@ export function TransactionForm({
 
       {error && <p className="text-sm text-negative">{error}</p>}
 
-      <div className="flex gap-3">
-        <button type="submit" disabled={saving} className="btn-primary px-5">
-          {saving ? "Saving…" : isEdit ? "Save changes" : "Add transaction"}
-        </button>
+      <div className="flex flex-wrap gap-3">
+        {isPending ? (
+          <>
+            <button
+              type="submit"
+              value="confirm"
+              disabled={saving}
+              className="btn-primary px-5"
+            >
+              {saving ? "Saving…" : "Save & confirm"}
+            </button>
+            <button type="submit" value="save" disabled={saving} className="btn-ghost px-5">
+              Save, keep in review
+            </button>
+          </>
+        ) : (
+          <button type="submit" disabled={saving} className="btn-primary px-5">
+            {saving ? "Saving…" : isEdit ? "Save changes" : "Add transaction"}
+          </button>
+        )}
         <button type="button" onClick={() => router.back()} className="btn-ghost px-5">
           Cancel
         </button>
