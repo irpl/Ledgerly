@@ -91,7 +91,16 @@ export function SidebarNav({ version }: { version?: string }) {
 
 function SignOutButton({ className }: { className: string }) {
   return (
-    <button onClick={() => signOut({ callbackUrl: "/login" })} className={className}>
+    // Don't follow the URL Auth.js returns: behind Coolify's proxy it builds it
+    // from the container's host (https://localhost:3000). A relative hard
+    // navigation stays on whatever host the user is actually on.
+    <button
+      onClick={async () => {
+        await signOut({ redirect: false });
+        window.location.assign("/login");
+      }}
+      className={className}
+    >
       <LogOut size={18} strokeWidth={2} aria-hidden />
       Sign out
     </button>
