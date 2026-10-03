@@ -1,0 +1,27 @@
+#!/bin/sh
+# Refuse to push main unless package.json's version changed since what the
+# remote has. The sidebar version is how we tell a deploy has gone live.
+# Bump with: npm version patch --no-git-tag-version (minor for features).
+
+zero=0000000000000000000000000000000000000000
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/main" ] || continue
+  [ "$local_sha" = "$zero" ] && continue   # deleting the branch
+  [ "$remote_sha" = "$zero" ] && continue  # first push
+
+  version_of() {
+    git show "$1:package.json" 2>/dev/null | sed -n 's/^  "version": "\(.*\)",$/\1/p'
+  }
+  old=$(version_of "$remote_sha")
+  new=$(version_of "$local_sha")
+
+  if [ -n "$old" ] && [ "$old" = "$new" ]; then
+    echo "pre-push: package.json version is still $new on main." >&2
+    echo "Bump it first: npm version patch --no-git-tag-version (minor for a feature)," >&2
+    echo "then commit \"Bump version to X.Y.Z\" and push again." >&2
+    exit 1
+  fi
+done
+
+exit 0
