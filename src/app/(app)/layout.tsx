@@ -8,7 +8,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <SidebarNav version={APP_VERSION} />
       <main className="flex-1 min-w-0 p-4 md:p-8 pb-24 md:pb-8 max-w-5xl">{children}</main>
       <AddTransactionFab />
-      <BottomNav />
+      <BottomNav version={APP_VERSION} />
     </div>
   );
 }

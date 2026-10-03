@@ -62,7 +62,7 @@ function sidebarLinkClass(active: boolean) {
 export function SidebarNav({ version }: { version?: string }) {
   const pathname = usePathname();
   return (
-    <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-border-subtle p-4 gap-1 min-h-dvh sticky top-0">
+    <aside className="hidden md:flex md:flex-col w-56 shrink-0 border-r border-border-subtle p-4 gap-1 h-dvh sticky top-0 self-start overflow-y-auto">
       <div className="mb-4 px-2">
         <div className="font-bold text-lg leading-tight">Ledgerly</div>
         {version && (
@@ -107,7 +107,7 @@ function SignOutButton({ className }: { className: string }) {
   );
 }
 
-export function BottomNav() {
+export function BottomNav({ version }: { version?: string }) {
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement>(null);
@@ -185,6 +185,11 @@ export function BottomNav() {
             <SignOutButton
               className={`${SIDEBAR_LINK} w-full text-muted hover:bg-surface-raised hover:text-foreground`}
             />
+            {version && (
+              <div className="px-3 pt-2 pb-1 text-xs text-muted">
+                Ledgerly <span className="amount">v{version}</span>
+              </div>
+            )}
           </div>
         </div>
       )}
