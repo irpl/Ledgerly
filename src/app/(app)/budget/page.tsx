@@ -94,7 +94,7 @@ export default async function BudgetPage(props: {
     <div className="space-y-8">
       <h1 className="text-2xl font-bold">Budget</h1>
 
-      <section className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <section className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <div className="card">
           <div className="text-xs text-muted mb-1">Planned income / mo</div>
           <div className="text-xl font-bold amount amount-positive">
@@ -129,7 +129,7 @@ export default async function BudgetPage(props: {
       </section>
 
       <section>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
           <h2 className="text-sm font-semibold text-muted uppercase tracking-wide">
             Budget vs actual
           </h2>

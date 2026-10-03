@@ -263,6 +263,36 @@ function BudgetLineRow({
     );
   }
 
+  const paidBy = line.paymentMethod === "cash" ? "Cash" : "Credit";
+  const actions = (
+    <>
+      <button
+        onClick={toggleActive}
+        disabled={busy}
+        className="btn-ghost px-2.5! py-1.5! text-xs"
+      >
+        {line.active ? "Pause" : "Resume"}
+      </button>
+      <button
+        onClick={() => setEditing(true)}
+        className="btn-ghost p-2!"
+        aria-label={`Edit ${line.name}`}
+      >
+        <Pencil size={15} aria-hidden />
+      </button>
+      <button
+        onClick={remove}
+        disabled={busy}
+        className="btn-danger p-2!"
+        aria-label={`Delete ${line.name}`}
+      >
+        <Trash2 size={15} aria-hidden />
+      </button>
+    </>
+  );
+
+  // Phones get two cells: the name with details and actions stacked under it,
+  // and the monthly figure. The detail columns only appear from lg up (md still has the sidebar).
   return (
     <tr
       className={`hover:bg-surface-raised transition-colors duration-150 ${
@@ -276,44 +306,30 @@ function BudgetLineRow({
             paused
           </span>
         )}
+        <div className="lg:hidden mt-1 text-xs text-muted">
+          {line.categoryName} · {paidBy} · {line.fundingAccountName}
+          <br />
+          <span className="amount">
+            {formatMoney(line.amount, line.fundingAccountCurrency, { code: showCurrency })}
+          </span>{" "}
+          {FREQUENCY_LABELS[line.frequency].toLowerCase()}
+        </div>
+        <div className="lg:hidden mt-2 flex items-center gap-2">{actions}</div>
       </td>
-      <td className="p-3 text-muted">{line.categoryName}</td>
-      <td className="p-3 text-muted">{FREQUENCY_LABELS[line.frequency]}</td>
-      <td className="p-3 text-muted">{line.paymentMethod === "cash" ? "Cash" : "Credit"}</td>
-      <td className="p-3 text-muted">{line.fundingAccountName}</td>
-      <td className="p-3 text-right amount whitespace-nowrap">
+      <td className="hidden lg:table-cell p-3 text-muted">{line.categoryName}</td>
+      <td className="hidden lg:table-cell p-3 text-muted">{FREQUENCY_LABELS[line.frequency]}</td>
+      <td className="hidden lg:table-cell p-3 text-muted">{paidBy}</td>
+      <td className="hidden lg:table-cell p-3 text-muted">{line.fundingAccountName}</td>
+      <td className="hidden lg:table-cell p-3 text-right amount whitespace-nowrap">
         {formatMoney(line.amount, line.fundingAccountCurrency, { code: showCurrency })}
       </td>
-      <td className="p-3 text-right font-semibold amount whitespace-nowrap">
+      <td className="p-3 text-right align-top lg:align-middle font-semibold amount whitespace-nowrap">
         {formatMoney(line.normalizedMonthly, line.fundingAccountCurrency, {
           code: showCurrency,
         })}
       </td>
-      <td className="p-3">
-        <div className="flex items-center justify-end gap-2">
-          <button
-            onClick={toggleActive}
-            disabled={busy}
-            className="btn-ghost px-2.5! py-1.5! text-xs"
-          >
-            {line.active ? "Pause" : "Resume"}
-          </button>
-          <button
-            onClick={() => setEditing(true)}
-            className="btn-ghost p-2!"
-            aria-label={`Edit ${line.name}`}
-          >
-            <Pencil size={15} aria-hidden />
-          </button>
-          <button
-            onClick={remove}
-            disabled={busy}
-            className="btn-danger p-2!"
-            aria-label={`Delete ${line.name}`}
-          >
-            <Trash2 size={15} aria-hidden />
-          </button>
-        </div>
+      <td className="hidden lg:table-cell p-3">
+        <div className="flex items-center justify-end gap-2">{actions}</div>
       </td>
     </tr>
   );
@@ -355,8 +371,8 @@ function IncomeRow({ item, onChanged }: { item: IncomePlanDTO; onChanged: () => 
     return (
       <tr>
         <td colSpan={INCOME_COLUMNS} className="p-3">
-          <form onSubmit={save} className="flex items-end gap-2">
-            <div className="flex-1">
+          <form onSubmit={save} className="flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-40">
               <label className="label">Label</label>
               <input required value={label} onChange={(e) => setLabel(e.target.value)} className="input" />
             </div>
@@ -535,17 +551,19 @@ export function BudgetManager({
               <thead>
                 <tr className="border-b border-border-subtle text-left text-xs uppercase tracking-wide text-muted">
                   <th className="p-3 font-semibold">Name</th>
-                  <th className="p-3 font-semibold">Category</th>
-                  <th className="p-3 font-semibold">Frequency</th>
-                  <th className="p-3 font-semibold whitespace-nowrap">Paid by</th>
-                  <th className="p-3 font-semibold">Account</th>
-                  <th className="p-3 font-semibold text-right whitespace-nowrap">
+                  <th className="hidden lg:table-cell p-3 font-semibold">Category</th>
+                  <th className="hidden lg:table-cell p-3 font-semibold">Frequency</th>
+                  <th className="hidden lg:table-cell p-3 font-semibold whitespace-nowrap">
+                    Paid by
+                  </th>
+                  <th className="hidden lg:table-cell p-3 font-semibold">Account</th>
+                  <th className="hidden lg:table-cell p-3 font-semibold text-right whitespace-nowrap">
                     Amount{tableCurrency && ` (${tableCurrency})`}
                   </th>
                   <th className="p-3 font-semibold text-right whitespace-nowrap">
                     Per month{tableCurrency && ` (${tableCurrency})`}
                   </th>
-                  <th className="p-3" aria-label="Actions" />
+                  <th className="hidden lg:table-cell p-3" aria-label="Actions" />
                 </tr>
               </thead>
               <tbody className="divide-y divide-border-subtle">
@@ -563,8 +581,11 @@ export function BudgetManager({
               {plannedTotal && (
                 <tfoot>
                   <tr className="border-t border-border-subtle">
+                    <td className="lg:hidden p-3 text-xs font-semibold uppercase tracking-wide text-muted">
+                      Total planned / mo
+                    </td>
                     <td
-                      className="p-3 text-xs font-semibold uppercase tracking-wide text-muted"
+                      className="hidden lg:table-cell p-3 text-xs font-semibold uppercase tracking-wide text-muted"
                       colSpan={6}
                     >
                       Total planned / mo
@@ -572,7 +593,7 @@ export function BudgetManager({
                     <td className="p-3 text-right font-semibold amount whitespace-nowrap">
                       {formatMoney(plannedTotal.amount, plannedTotal.currency, { code: false })}
                     </td>
-                    <td className="p-3" />
+                    <td className="hidden lg:table-cell p-3" />
                   </tr>
                 </tfoot>
               )}
@@ -593,8 +614,8 @@ export function BudgetManager({
         </div>
 
         {showIncomeForm && (
-          <form onSubmit={createIncome} className="card mb-4 flex items-end gap-2">
-            <div className="flex-1">
+          <form onSubmit={createIncome} className="card mb-4 flex flex-wrap items-end gap-2">
+            <div className="flex-1 min-w-40">
               <label htmlFor="income-label" className="label">
                 Label
               </label>
