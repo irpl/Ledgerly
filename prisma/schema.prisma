@@ -322,6 +322,8 @@ model RawEmail {
   matchedRuleId        String?
   matchedRule          ParserRule? @relation(fields: [matchedRuleId], references: [id], onDelete: SetNull)
   parseStatus          ParseStatus @default(unparsed)
+  // Why the last parse failed, naming every rule that was tried; null otherwise.
+  parseError           String?     @db.Text
   createdTransactionId String?
   createdAt            DateTime    @default(now())
 
@@ -341,6 +343,9 @@ model ParserRule {
   accountId        String
   account          Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
   defaultDirection TxnDirection @default(outflow)
+  // Evaluation order: lower runs first (ties break by name). Every rule whose
+  // sender and subject match is tried in this order until one parses.
+  priority         Int          @default(100)
 
   rawEmails RawEmail[]
 

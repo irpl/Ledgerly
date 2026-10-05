@@ -134,6 +134,9 @@ export const parserRuleInput = z.object({
     ),
   accountId: z.string().min(1),
   defaultDirection: z.enum(["outflow", "inflow"]),
+  // Lower runs first. Optional so a PATCH without it keeps the stored value;
+  // the database default (100) applies on create.
+  priority: z.number().int().min(0).max(10_000).optional(),
 });
 
 export type ParserRuleInput = z.infer<typeof parserRuleInput>;

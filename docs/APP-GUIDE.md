@@ -459,14 +459,19 @@ unparsed`.
 `POST /api/inbound-email*` → **RawEmail** created → `applyParserRules` → (maybe)
 a `pending_review` **Transaction** → **Review** page → you confirm.
 
-**`applyParserRules`** iterates rules by name:
+**`applyParserRules`** iterates rules by `priority` (lower first; ties by name):
 1. Match sender via case-insensitive `from.includes(senderMatch)`; if
-   `subjectPattern` is set it must also match.
-2. The **first rule whose sender+subject match "claims" the email.** Its
+   `subjectPattern` is set it must also match. Rules that fail this check are
+   never tried — the sender is the safety gate.
+2. Every rule that passes is a **candidate**. Candidates are tried in order: the
    `bodyPattern` (a regex with a **required `(?<amount>…)` group** and optional
-   `direction`, `date`, `merchant`) is run against the body. If the body regex is
-   invalid, doesn't match, or the amount can't be parsed → the email is marked
-   **`failed`** (it does **not** fall through to other rules).
+   `direction`, `date`, `merchant`) runs against the body, and the **first
+   candidate that extracts an amount wins** — one email never yields two
+   transactions. A candidate whose regex is invalid, doesn't match, or whose
+   amount can't be parsed is skipped. Only when **every** candidate fails is the
+   email marked **`failed`**, with `RawEmail.parseError` naming each rule tried
+   and why. So one sender can have several rules that tell its alert types apart
+   by body.
 3. On success: direction = parsed `direction` group, else the rule's
    `defaultDirection`; date = parsed `date`, else `receivedAt`; merchant → vendor
    (upserted). A Transaction is created `source: email`, **`status:

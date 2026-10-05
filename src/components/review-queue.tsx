@@ -20,6 +20,7 @@ export type UnmatchedEmail = {
   body: string;
   receivedAt: string;
   parseStatus: string;
+  parseError: string | null;
 };
 
 export type RuleItem = {
@@ -31,6 +32,8 @@ export type RuleItem = {
   defaultDirection: string;
   accountId: string;
   accountName: string;
+  priority: number;
+  parsedEmails: number;
 };
 
 function PendingRow({ item, onChanged }: { item: PendingItem; onChanged: () => void }) {
@@ -145,6 +148,9 @@ function EmailRow({
               {email.parseStatus}
             </span>
           </div>
+          {email.parseError && (
+            <div className="text-xs text-negative mt-0.5 break-words">{email.parseError}</div>
+          )}
         </div>
       </div>
       <details className="text-xs">
@@ -246,8 +252,9 @@ function RuleRow({
               {rule.name}
             </span>
             <span className="block text-xs text-muted truncate">
-              {rule.senderMatch} → {rule.accountName} ·{" "}
-              {rule.defaultDirection === "outflow" ? "out" : "in"} by default
+              #{rule.priority} · {rule.senderMatch} → {rule.accountName} ·{" "}
+              {rule.defaultDirection === "outflow" ? "out" : "in"} by default ·{" "}
+              {rule.parsedEmails} parsed
             </span>
             {!expanded && (
               <span className="block text-xs text-muted amount truncate mt-0.5">
@@ -286,6 +293,8 @@ function RuleRow({
             <RuleDetail label="Sender contains" value={rule.senderMatch} mono />
             <RuleDetail label="Subject pattern" value={rule.subjectPattern ?? "— (any subject)"} mono />
             <RuleDetail label="Account" value={rule.accountName} />
+            <RuleDetail label="Priority" value={`${rule.priority} (lower is tried first)`} />
+            <RuleDetail label="Emails parsed" value={String(rule.parsedEmails)} />
             <RuleDetail
               label="Default direction"
               value={rule.defaultDirection === "outflow" ? "Money out" : "Money in"}
@@ -316,6 +325,7 @@ function RuleRow({
               bodyPattern: rule.bodyPattern,
               accountId: rule.accountId,
               defaultDirection: rule.defaultDirection === "inflow" ? "inflow" : "outflow",
+              priority: String(rule.priority),
             }}
             onDone={() => {
               setEditing(false);

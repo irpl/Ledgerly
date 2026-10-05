@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
-import { applyParserRules } from "@/lib/email-parser";
+import { applyParserRules, lostParseRace } from "@/lib/email-parser";
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -16,12 +16,16 @@ export async function POST(_req: NextRequest, { params }: Params) {
     include: { transaction: true },
   });
   if (!email) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (email.transaction) {
-    return NextResponse.json(
-      { error: "This email already created a transaction." },
-      { status: 409 }
-    );
+  const alreadyParsed = NextResponse.json(
+    { error: "This email already created a transaction." },
+    { status: 409 }
+  );
+  if (email.transaction) return alreadyParsed;
+  try {
+    const outcome = await applyParserRules(email);
+    return NextResponse.json({ outcome });
+  } catch (e) {
+    if (await lostParseRace(e, email.id)) return alreadyParsed;
+    throw e;
   }
-  const outcome = await applyParserRules(email);
-  return NextResponse.json({ outcome });
 }

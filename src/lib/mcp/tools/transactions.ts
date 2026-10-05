@@ -6,7 +6,7 @@ import type { Prisma } from "@/generated/prisma/client";
 import { recomputeBalance } from "@/lib/accounts";
 import { upsertVendor } from "@/lib/transactions";
 import { minorToMajor } from "@/lib/money";
-import { applyParserRules } from "@/lib/email-parser";
+import { applyParserRules, lostParseRace } from "@/lib/email-parser";
 import { defineTool, ToolError } from "@/lib/mcp/types";
 import {
   TRANSACTION_INCLUDE,
@@ -464,6 +464,8 @@ export const listReviewQueue = defineTool({
         subject: e.subject,
         receivedAt: e.receivedAt.toISOString(),
         parseStatus: e.parseStatus,
+        // For failed emails: every rule that was tried and why each one didn't fit.
+        parseError: e.parseError,
         // Enough body to write a parser rule against without dumping whole alerts.
         bodyPreview: e.body.slice(0, 1000),
       })),
@@ -502,7 +504,8 @@ export const reparseEmail = defineTool({
   title: "Re-run parser rules on an email",
   description:
     "Re-run the parser rules against a stored email — the way to test a rule you just created or fixed. " +
-    "A match creates a pending-review transaction.",
+    "Every rule whose sender and subject match is tried in priority order; the first whose body pattern " +
+    "parses creates a pending-review transaction. A `failed` outcome lists each rule tried in `attempts`.",
   readOnly: false,
   inputSchema: z.object({ emailId: z.string().describe("Id from list_review_queue.") }),
   handler: async (args, ctx) => {
@@ -511,9 +514,13 @@ export const reparseEmail = defineTool({
       include: { transaction: true },
     });
     if (!email) throw new ToolError(`No email with id "${args.emailId}".`);
-    if (email.transaction) {
-      throw new ToolError("That email already created a transaction.");
+    const alreadyParsed = "That email already created a transaction.";
+    if (email.transaction) throw new ToolError(alreadyParsed);
+    try {
+      return { outcome: await applyParserRules(email) };
+    } catch (e) {
+      if (await lostParseRace(e, email.id)) throw new ToolError(alreadyParsed);
+      throw e;
     }
-    return { outcome: await applyParserRules(email) };
   },
 });

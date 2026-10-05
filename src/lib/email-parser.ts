@@ -1,7 +1,7 @@
 // Server-only: parse bank-alert emails into pending-review transactions (§5.5).
 import PostalMime from "postal-mime";
 import { prisma } from "@/lib/prisma";
-import type { Prisma, RawEmail } from "@/generated/prisma/client";
+import { Prisma, type RawEmail } from "@/generated/prisma/client";
 import { upsertVendor } from "@/lib/transactions";
 import { majorToMinor } from "@/lib/money";
 
@@ -104,25 +104,72 @@ function parseDirection(raw: string | undefined): "outflow" | "inflow" | null {
   return null;
 }
 
+export type RuleAttempt = { ruleId: string; ruleName: string; reason: string };
+
 export type ParseOutcome =
   | { status: "parsed"; transactionId: string; ruleId: string }
-  | { status: "failed"; ruleId: string; reason: string }
+  | { status: "failed"; reason: string; attempts: RuleAttempt[] }
   | { status: "unparsed" };
 
+/** Rule order everywhere: explicit priority (lower first), then name, then id. */
+export const PARSER_RULE_ORDER = [
+  { priority: "asc" },
+  { name: "asc" },
+  { id: "asc" },
+] satisfies Prisma.ParserRuleOrderByWithRelationInput[];
+
+type Extracted = {
+  amountMinor: number;
+  direction: "outflow" | "inflow";
+  occurredAt: Date;
+  merchant: string | null;
+};
+
+/** Run one rule's body pattern; a string is the reason it didn't fit. */
+function extract(
+  rule: { bodyPattern: string; defaultDirection: string },
+  email: RawEmail
+): Extracted | string {
+  let bodyRe: RegExp;
+  try {
+    bodyRe = new RegExp(rule.bodyPattern, "i");
+  } catch {
+    return "body pattern is not a valid regex";
+  }
+  const match = bodyRe.exec(email.body);
+  if (!match?.groups?.amount) return "body pattern did not match or has no `amount` group";
+  const amountMinor = parseAmount(match.groups.amount);
+  if (amountMinor === null) return `could not parse amount "${match.groups.amount}"`;
+  return {
+    amountMinor,
+    direction:
+      parseDirection(match.groups.direction) ?? (rule.defaultDirection as "outflow" | "inflow"),
+    occurredAt: (match.groups.date ? parseEmailDate(match.groups.date) : null) ?? email.receivedAt,
+    merchant: match.groups.merchant?.trim() || null,
+  };
+}
+
 /**
- * Run the first matching ParserRule against a raw email. On success, creates a
- * pending-review transaction (does NOT touch balances until confirmed).
+ * Run the user's ParserRules against a raw email. Every rule whose sender and
+ * subject match is a candidate; candidates are tried in priority order and the
+ * first whose body pattern extracts an amount wins, creating one
+ * pending-review transaction (balances are untouched until it is confirmed).
+ * The email is `failed` only when every candidate fails, and the reason names
+ * each rule that was tried.
  */
 export async function applyParserRules(email: RawEmail): Promise<ParseOutcome> {
   // Rules are per-user; an unrouted email (no owner) is never parsed.
   if (!email.userId) return { status: "unparsed" };
   const rules = await prisma.parserRule.findMany({
     where: { userId: email.userId },
-    orderBy: { name: "asc" },
+    orderBy: PARSER_RULE_ORDER,
   });
   const from = email.fromAddress.toLowerCase();
+  const attempts: RuleAttempt[] = [];
 
   for (const rule of rules) {
+    // The sender check is the safety gate: a rule is never tried on mail from
+    // anyone else, whatever its body pattern would match.
     if (!from.includes(rule.senderMatch.toLowerCase())) continue;
     if (rule.subjectPattern) {
       let subjectRe: RegExp;
@@ -134,42 +181,14 @@ export async function applyParserRules(email: RawEmail): Promise<ParseOutcome> {
       if (!subjectRe.test(email.subject)) continue;
     }
 
-    // This rule claims the email; extraction failure is a "failed" parse.
-    let bodyRe: RegExp;
-    try {
-      bodyRe = new RegExp(rule.bodyPattern, "i");
-    } catch {
-      return await markOutcome(email.id, {
-        status: "failed",
-        ruleId: rule.id,
-        reason: "Body pattern is not a valid regex",
-      });
-    }
-    const match = bodyRe.exec(email.body);
-    if (!match?.groups?.amount) {
-      return await markOutcome(email.id, {
-        status: "failed",
-        ruleId: rule.id,
-        reason: "Body pattern did not match or has no `amount` group",
-      });
+    const result = extract(rule, email);
+    if (typeof result === "string") {
+      attempts.push({ ruleId: rule.id, ruleName: rule.name, reason: result });
+      continue;
     }
 
-    const amountMinor = parseAmount(match.groups.amount);
-    if (amountMinor === null) {
-      return await markOutcome(email.id, {
-        status: "failed",
-        ruleId: rule.id,
-        reason: `Could not parse amount "${match.groups.amount}"`,
-      });
-    }
-
-    const direction =
-      parseDirection(match.groups.direction) ?? (rule.defaultDirection as "outflow" | "inflow");
+    const { amountMinor, direction, occurredAt, merchant } = result;
     const signed = direction === "outflow" ? -BigInt(amountMinor) : BigInt(amountMinor);
-    const occurredAt =
-      (match.groups.date ? parseEmailDate(match.groups.date) : null) ?? email.receivedAt;
-    const merchant = match.groups.merchant?.trim() || null;
-
     const transaction = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
       const vendorId = await upsertVendor(tx, email.userId!, merchant, null);
       const created = await tx.transaction.create({
@@ -188,6 +207,7 @@ export async function applyParserRules(email: RawEmail): Promise<ParseOutcome> {
         where: { id: email.id },
         data: {
           parseStatus: "parsed",
+          parseError: null,
           matchedRuleId: rule.id,
           createdTransactionId: created.id,
         },
@@ -195,23 +215,45 @@ export async function applyParserRules(email: RawEmail): Promise<ParseOutcome> {
       return created;
     });
 
+    // First success wins: one email never produces two transactions.
     return { status: "parsed", transactionId: transaction.id, ruleId: rule.id };
+  }
+
+  if (attempts.length > 0) {
+    const reason = describeFailure(attempts);
+    await prisma.rawEmail.update({
+      where: { id: email.id },
+      data: { parseStatus: "failed", parseError: reason, matchedRuleId: null },
+    });
+    return { status: "failed", reason, attempts };
   }
 
   await prisma.rawEmail.update({
     where: { id: email.id },
-    data: { parseStatus: "unparsed", matchedRuleId: null },
+    data: { parseStatus: "unparsed", parseError: null, matchedRuleId: null },
   });
   return { status: "unparsed" };
 }
 
-async function markOutcome(
-  emailId: string,
-  outcome: Extract<ParseOutcome, { status: "failed" }>
-): Promise<ParseOutcome> {
-  await prisma.rawEmail.update({
-    where: { id: emailId },
-    data: { parseStatus: "failed", matchedRuleId: outcome.ruleId },
-  });
-  return outcome;
+/** "Tried 2 rules for this sender and subject; none parsed: "A" — …; "B" — …" */
+export function describeFailure(attempts: RuleAttempt[]): string {
+  const n = attempts.length;
+  const head =
+    n === 1
+      ? "Tried 1 rule for this sender and subject; it did not parse"
+      : `Tried ${n} rules for this sender and subject; none parsed`;
+  return `${head}: ${attempts.map((a) => `"${a.ruleName}" — ${a.reason}`).join("; ")}`;
+}
+
+/**
+ * True when `error` came from losing a race to parse this email: two manual
+ * re-parses can both pass the "no transaction yet" check, and the unique
+ * `Transaction.rawEmailId` then rejects the second insert. Any other unique
+ * violation (or none) returns false, so the caller rethrows it.
+ */
+export async function lostParseRace(error: unknown, emailId: string): Promise<boolean> {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) {
+    return false;
+  }
+  return (await prisma.transaction.count({ where: { rawEmailId: emailId } })) > 0;
 }

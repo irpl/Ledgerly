@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { minorToMajor } from "@/lib/money";
+import { PARSER_RULE_ORDER } from "@/lib/email-parser";
 
 function csvEscape(value: unknown): string {
   if (value === null || value === undefined) return "";
@@ -142,12 +143,12 @@ const EXPORTERS: Record<
     const items = await prisma.parserRule.findMany({
       where: { userId },
       include: { account: true },
-      orderBy: { name: "asc" },
+      orderBy: PARSER_RULE_ORDER,
     });
     return {
-      headers: ["id", "name", "senderMatch", "subjectPattern", "bodyPattern", "account", "defaultDirection"],
+      headers: ["id", "name", "priority", "senderMatch", "subjectPattern", "bodyPattern", "account", "defaultDirection"],
       rows: items.map((r) => [
-        r.id, r.name, r.senderMatch, r.subjectPattern, r.bodyPattern, r.account.name, r.defaultDirection,
+        r.id, r.name, r.priority, r.senderMatch, r.subjectPattern, r.bodyPattern, r.account.name, r.defaultDirection,
       ]),
     };
   },

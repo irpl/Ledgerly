@@ -12,6 +12,8 @@ export type RuleFormValues = {
   bodyPattern: string;
   accountId: string;
   defaultDirection: "outflow" | "inflow";
+  /** Kept as typed text so the field can be cleared mid-edit; sent as a number. */
+  priority: string;
 };
 
 function TesterResult({ pattern, sample }: { pattern: string; sample: string }) {
@@ -65,6 +67,7 @@ export function ParserRuleForm({
       String.raw`(?<direction>debited|credited).*?(?<amount>[\d,]+\.\d{2}).*?at (?<merchant>.+?) on (?<date>\d{2}-\w{3}-\d{4})`,
     accountId: initial?.accountId ?? accounts[0]?.id ?? "",
     defaultDirection: initial?.defaultDirection ?? "outflow",
+    priority: initial?.priority ?? "100",
   });
   const [sample, setSample] = useState(sampleBody ?? "");
   const [busy, setBusy] = useState(false);
@@ -83,6 +86,7 @@ export function ParserRuleForm({
       body: JSON.stringify({
         ...values,
         subjectPattern: values.subjectPattern || null,
+        priority: Number(values.priority),
       }),
     });
     setBusy(false);
@@ -156,16 +160,39 @@ export function ParserRuleForm({
         />
       </div>
 
-      <div>
-        <label className="label">Default direction (when the email doesn&apos;t say)</label>
-        <select
-          value={values.defaultDirection}
-          onChange={(e) => set("defaultDirection", e.target.value as "outflow" | "inflow")}
-          className={`${inputCls} max-w-48`}
-        >
-          <option value="outflow">Money out</option>
-          <option value="inflow">Money in</option>
-        </select>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="label">Default direction (when the email doesn&apos;t say)</label>
+          <select
+            value={values.defaultDirection}
+            onChange={(e) => set("defaultDirection", e.target.value as "outflow" | "inflow")}
+            className={`${inputCls} max-w-48`}
+          >
+            <option value="outflow">Money out</option>
+            <option value="inflow">Money in</option>
+          </select>
+        </div>
+        <div>
+          <label className="label" htmlFor="rule-priority">
+            Priority (lower is tried first)
+          </label>
+          <input
+            id="rule-priority"
+            type="number"
+            required
+            min={0}
+            max={10000}
+            step={1}
+            value={values.priority}
+            onChange={(e) => set("priority", e.target.value)}
+            className={`${inputCls} amount max-w-32`}
+            aria-describedby="rule-priority-help"
+          />
+          <p id="rule-priority-help" className="text-xs text-muted mt-1">
+            Rules with the same sender and subject are tried in this order until one
+            body pattern matches.
+          </p>
+        </div>
       </div>
 
       <div>

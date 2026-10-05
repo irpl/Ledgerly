@@ -3,6 +3,7 @@ import { getUserId } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 import { parserRuleInput } from "@/lib/validation";
 import { ownsAccount } from "@/lib/ownership";
+import { PARSER_RULE_ORDER } from "@/lib/email-parser";
 
 export async function GET() {
   const userId = await getUserId();
@@ -11,7 +12,7 @@ export async function GET() {
   const rules = await prisma.parserRule.findMany({
     where: { userId },
     include: { account: { select: { name: true } } },
-    orderBy: { name: "asc" },
+    orderBy: PARSER_RULE_ORDER,
   });
   return NextResponse.json({ rules });
 }
@@ -40,6 +41,7 @@ export async function POST(req: NextRequest) {
       bodyPattern: data.bodyPattern,
       accountId: data.accountId,
       defaultDirection: data.defaultDirection,
+      priority: data.priority,
     },
   });
   return NextResponse.json({ rule }, { status: 201 });

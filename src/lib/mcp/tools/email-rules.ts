@@ -4,6 +4,14 @@ import { prisma } from "@/lib/prisma";
 import { parserRuleInput } from "@/lib/validation";
 import { defineTool, ToolError } from "@/lib/mcp/types";
 import { requireAccount } from "@/lib/mcp/shared";
+import { PARSER_RULE_ORDER } from "@/lib/email-parser";
+
+const PRIORITY_HELP =
+  "Evaluation order, lower first (default 100; ties break by name). Every rule whose sender and subject match " +
+  "is tried in this order until one body pattern parses, so several rules can share a sender and tell its " +
+  "alert types apart by body.";
+
+const priorityArg = z.number().int().min(0).max(10_000).describe(PRIORITY_HELP);
 
 const BODY_PATTERN_HELP =
   "JavaScript regular expression with named groups. (?<amount>…) is required; (?<date>…), " +
@@ -23,7 +31,7 @@ export const listParserRules = defineTool({
   title: "List parser rules",
   description:
     "The rules that match incoming bank alerts and turn them into pending transactions, with how many emails " +
-    "each has matched. A sender whose alerts keep landing in the review queue unmatched needs a new rule.",
+    "each has successfully parsed, in the order they are tried. A sender whose alerts keep landing in the review queue unmatched needs a new rule.",
   readOnly: true,
   inputSchema: z.object({}),
   handler: async (_args, ctx) => {
@@ -31,21 +39,22 @@ export const listParserRules = defineTool({
       where: { userId: ctx.userId },
       include: {
         account: { select: { id: true, name: true } },
-        _count: { select: { rawEmails: true } },
+        _count: { select: { rawEmails: { where: { parseStatus: "parsed" } } } },
       },
-      orderBy: { name: "asc" },
+      orderBy: PARSER_RULE_ORDER,
     });
     return {
       rules: rules.map((r) => ({
         id: r.id,
         name: r.name,
+        priority: r.priority,
         senderMatch: r.senderMatch,
         subjectPattern: r.subjectPattern,
         bodyPattern: r.bodyPattern,
         accountId: r.account.id,
         account: r.account.name,
         defaultDirection: r.defaultDirection,
-        matchedEmails: r._count.rawEmails,
+        parsedEmails: r._count.rawEmails,
       })),
     };
   },
@@ -80,6 +89,7 @@ export const createParserRule = defineTool({
       .enum(["outflow", "inflow"])
       .default("outflow")
       .describe("Used when the pattern has no (?<direction>…) group."),
+    priority: priorityArg.optional(),
   }),
   handler: async (args, ctx) => {
     await requireAccount(ctx, args.accountId);
@@ -93,6 +103,7 @@ export const createParserRule = defineTool({
         bodyPattern: args.bodyPattern,
         accountId: args.accountId,
         defaultDirection: args.defaultDirection,
+        priority: args.priority,
       },
     });
     return { rule };
@@ -121,6 +132,7 @@ export const updateParserRule = defineTool({
     bodyPattern: z.string().trim().min(1).max(2000).optional(),
     accountId: z.string().optional(),
     defaultDirection: z.enum(["outflow", "inflow"]).optional(),
+    priority: priorityArg.optional(),
   }),
   handler: async (args, ctx) => {
     const existing = await prisma.parserRule.findFirst({
@@ -139,6 +151,7 @@ export const updateParserRule = defineTool({
         bodyPattern: args.bodyPattern,
         accountId: args.accountId,
         defaultDirection: args.defaultDirection,
+        priority: args.priority,
       },
     });
     return { rule };

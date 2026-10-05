@@ -9,6 +9,7 @@ import {
   type RuleItem,
 } from "@/components/review-queue";
 import { UnroutedEmails } from "@/components/unrouted-emails";
+import { PARSER_RULE_ORDER } from "@/lib/email-parser";
 
 export const dynamic = "force-dynamic";
 
@@ -27,8 +28,11 @@ export default async function ReviewPage() {
     }),
     prisma.parserRule.findMany({
       where: { userId },
-      include: { account: { select: { name: true } } },
-      orderBy: { name: "asc" },
+      include: {
+        account: { select: { name: true } },
+        _count: { select: { rawEmails: { where: { parseStatus: "parsed" } } } },
+      },
+      orderBy: PARSER_RULE_ORDER,
     }),
     prisma.account.findMany({
       where: { userId, archived: false },
@@ -64,6 +68,7 @@ export default async function ReviewPage() {
     body: e.body.length > 4000 ? `${e.body.slice(0, 4000)}…` : e.body,
     receivedAt: e.receivedAt.toISOString(),
     parseStatus: e.parseStatus,
+    parseError: e.parseError,
   }));
   const rules: RuleItem[] = ruleRows.map((r) => ({
     id: r.id,
@@ -74,6 +79,8 @@ export default async function ReviewPage() {
     defaultDirection: r.defaultDirection,
     accountId: r.accountId,
     accountName: r.account.name,
+    priority: r.priority,
+    parsedEmails: r._count.rawEmails,
   }));
 
   return (
