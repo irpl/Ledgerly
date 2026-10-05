@@ -7,6 +7,7 @@ import { Check, Trash2, RefreshCw, EyeOff, Plus, Pencil, ChevronDown } from "luc
 import type { AccountDTO } from "@/lib/account-shared";
 import type { TransactionDTO } from "@/lib/transaction-shared";
 import { formatMoney, amountClass } from "@/lib/money";
+import { localDate } from "@/lib/dates";
 import { ParserRuleForm } from "@/components/parser-rule-form";
 
 export type PendingItem = TransactionDTO & {
@@ -62,7 +63,7 @@ function PendingRow({ item, onChanged }: { item: PendingItem; onChanged: () => v
             {item.vendorName ?? item.description ?? "—"}
           </div>
           <div className="text-xs text-muted truncate">
-            {item.accountName} · {item.occurredAt.slice(0, 10)}
+            {item.accountName} · {localDate(item.occurredAt)}
             {item.categoryName ? ` · ${item.categoryName}` : " · uncategorized"}
           </div>
           {item.email && (
@@ -143,7 +144,7 @@ function EmailRow({
         <div className="min-w-0">
           <div className="text-sm font-medium truncate">{email.subject || "(no subject)"}</div>
           <div className="text-xs text-muted truncate">
-            {email.fromAddress} · {email.receivedAt.slice(0, 10)} ·{" "}
+            {email.fromAddress} · {localDate(email.receivedAt)} ·{" "}
             <span className={email.parseStatus === "failed" ? "text-negative" : ""}>
               {email.parseStatus}
             </span>

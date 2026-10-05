@@ -7,20 +7,9 @@ import type { AccountDTO } from "@/lib/account-shared";
 import type { CategoryDTO } from "@/lib/category-shared";
 import type { TransactionDTO, VendorSuggestion } from "@/lib/transaction-shared";
 import { minorToMajor } from "@/lib/money";
+import { localDate, localInputsToISO, localTime } from "@/lib/dates";
 
 type Direction = "out" | "in";
-
-function toLocalDate(iso?: string): string {
-  const d = iso ? new Date(iso) : new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function toLocalTime(iso?: string): string {
-  const d = iso ? new Date(iso) : new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-}
 
 export function TransactionForm({
   accounts,
@@ -43,8 +32,8 @@ export function TransactionForm({
   const [amountStr, setAmountStr] = useState(
     transaction ? String(Math.abs(minorToMajor(transaction.amount))) : ""
   );
-  const [date, setDate] = useState(toLocalDate(transaction?.occurredAt));
-  const [time, setTime] = useState(toLocalTime(transaction?.occurredAt));
+  const [date, setDate] = useState(localDate(transaction?.occurredAt));
+  const [time, setTime] = useState(localTime(transaction?.occurredAt));
   const [categoryId, setCategoryId] = useState(transaction?.categoryId ?? "");
   const [vendorName, setVendorName] = useState(transaction?.vendorName ?? "");
   const [description, setDescription] = useState(transaction?.description ?? "");
@@ -123,7 +112,7 @@ export function TransactionForm({
         accountId,
         amount,
         direction,
-        occurredAt: `${date}T${time}:00`,
+        occurredAt: localInputsToISO(date, time),
         categoryId: categoryId || null,
         vendorName: vendorName || null,
         description: description || null,

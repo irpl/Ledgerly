@@ -8,6 +8,7 @@ import {
   ACCOUNT_TYPE_LABELS,
 } from "@/lib/account-shared";
 import { formatMoney, amountClass } from "@/lib/money";
+import { localDate } from "@/lib/dates";
 import { ArchiveButton } from "@/components/archive-button";
 import { RunningBalanceChart } from "@/components/charts/running-balance-chart";
 import { IncomeExpenseChart } from "@/components/charts/income-expense-chart";
@@ -174,7 +175,7 @@ export default async function AccountDetailPage(props: {
                     {t.vendor?.name ?? t.description ?? "—"}
                   </div>
                   <div className="text-xs text-muted">
-                    {t.occurredAt.toISOString().slice(0, 10)}
+                    {localDate(t.occurredAt)}
                     {t.category ? ` · ${t.category.name}` : ""}
                   </div>
                 </div>

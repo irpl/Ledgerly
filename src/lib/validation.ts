@@ -56,7 +56,7 @@ export const transactionInput = z.object({
   // Positive major-unit amount; `direction` sets the sign.
   amount: z.number().positive(),
   direction: z.enum(["out", "in"]),
-  occurredAt: z.string().min(1), // ISO datetime (local date + time from the form)
+  occurredAt: z.string().min(1), // ISO instant; the form resolves the user's offset (lib/dates.ts)
   categoryId: z.string().nullish(),
   vendorName: z.string().trim().max(200).nullish(),
   description: z.string().trim().max(500).nullish(),

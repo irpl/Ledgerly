@@ -4,14 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowRight } from "lucide-react";
 import type { AccountDTO } from "@/lib/account-shared";
+import { localDate, localInputsToISO, localTime } from "@/lib/dates";
 
 function nowLocal() {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return {
-    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
-    time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
-  };
+  return { date: localDate(), time: localTime() };
 }
 
 export function TransferForm({
@@ -73,7 +69,7 @@ export function TransferForm({
         toAccountId,
         amount,
         toAmount,
-        occurredAt: `${date}T${time}:00`,
+        occurredAt: localInputsToISO(date, time),
         description: description || null,
       }),
     });

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { localDate } from "@/lib/dates";
 
 type UnroutedEmail = {
   id: string;
@@ -60,7 +61,7 @@ export function UnroutedEmails({
               <div className="text-sm font-medium truncate">{e.subject || "(no subject)"}</div>
               <div className="text-xs text-muted truncate">
                 {e.fromAddress}
-                {e.toAddress ? ` → ${e.toAddress}` : ""} · {e.receivedAt.slice(0, 10)}
+                {e.toAddress ? ` → ${e.toAddress}` : ""} · {localDate(e.receivedAt)}
               </div>
             </div>
             <div className="flex items-center gap-2 shrink-0">

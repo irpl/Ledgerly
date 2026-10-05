@@ -4,6 +4,7 @@ import { requireUserId } from "@/lib/current-user";
 import { toAccountDTO } from "@/lib/accounts";
 import { toTransactionDTO } from "@/lib/transactions";
 import { formatMoney, amountClass } from "@/lib/money";
+import { localDate } from "@/lib/dates";
 import type { CategoryDTO, CategoryKindValue } from "@/lib/category-shared";
 import { TransactionForm } from "@/components/transaction-form";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
@@ -60,7 +61,7 @@ export default async function EditTransactionPage(props: {
               <div>
                 <div className="text-sm font-medium">{leg.account.name}</div>
                 <div className="text-xs text-muted">
-                  {leg.occurredAt.toISOString().slice(0, 10)}
+                  {localDate(leg.occurredAt)}
                   {leg.description ? ` · ${leg.description}` : ""}
                 </div>
               </div>
