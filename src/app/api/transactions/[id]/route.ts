@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { transactionInput } from "@/lib/validation";
 import { toTransactionDTO, upsertVendor, signedMinorAmount } from "@/lib/transactions";
 import { recomputeBalance } from "@/lib/accounts";
+import { rememberCategory } from "@/lib/category-rules";
 import { ownsAccount, ownsCategory } from "@/lib/ownership";
 
 const INCLUDE = { account: true, category: true, vendor: true } as const;
@@ -58,9 +59,9 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
 
-  const updated = await prisma.$transaction(async (tx) => {
+  const { updated, remembered } = await prisma.$transaction(async (tx) => {
     const vendorId = await upsertVendor(tx, userId, data.vendorName, data.categoryId ?? null);
-    return tx.transaction.update({
+    const updated = await tx.transaction.update({
       where: { id },
       data: {
         accountId: data.accountId,
@@ -73,6 +74,13 @@ export async function PATCH(req: NextRequest, { params }: Params) {
       },
       include: INCLUDE,
     });
+    // After the update, so this transaction isn't counted among the pending
+    // ones the new rule files.
+    const remembered =
+      data.categoryId && data.rememberCategory
+        ? await rememberCategory(tx, userId, data.rememberCategory.pattern, data.categoryId)
+        : null;
+    return { updated, remembered };
   });
 
   // Recompute both sides if the transaction moved between accounts.
@@ -81,7 +89,7 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     await recomputeBalance(existing.accountId);
   }
 
-  return NextResponse.json({ transaction: toTransactionDTO(updated) });
+  return NextResponse.json({ transaction: toTransactionDTO(updated), rememberedRule: remembered });
 }
 
 export async function DELETE(_req: NextRequest, { params }: Params) {

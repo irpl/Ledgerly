@@ -31,6 +31,7 @@ model User {
   categories       Category[]
   vendors          Vendor[]
   parserRules      ParserRule[]
+  categoryRules    CategoryRule[]
   budgetLines      BudgetLine[]
   incomePlans      IncomePlan[]
   rawEmails        RawEmail[]
@@ -183,6 +184,7 @@ model Category {
   budgetLines   BudgetLine[]
   vendors       Vendor[]
   periodActuals BudgetPeriodActual[]
+  categoryRules CategoryRule[]
 
   @@unique([userId, name, kind])
 }
@@ -201,6 +203,23 @@ model Vendor {
   transactions Transaction[]
 
   @@unique([userId, nameNormalized])
+}
+
+// "Remember this category": a transaction whose vendor or description contains
+// `pattern` (case-insensitive, whitespace-collapsed) is filed under the
+// category when it arrives by email. Created only when the user opts in from
+// the transaction form; the longest matching pattern wins.
+model CategoryRule {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pattern    String // normalized via normalizeMatchText (category-rule-shared.ts)
+  categoryId String
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  matchCount Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, pattern])
 }
 
 // ---------- Transactions ----------

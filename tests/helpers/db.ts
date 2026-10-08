@@ -10,6 +10,7 @@ export async function resetDb() {
   await prisma.transaction.deleteMany();
   await prisma.rawEmail.deleteMany();
   await prisma.parserRule.deleteMany();
+  await prisma.categoryRule.deleteMany();
   await prisma.budgetPeriodActual.deleteMany();
   await prisma.budgetLine.deleteMany();
   await prisma.vendor.deleteMany();

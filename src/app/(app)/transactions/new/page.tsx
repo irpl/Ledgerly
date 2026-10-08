@@ -2,13 +2,14 @@ import { prisma } from "@/lib/prisma";
 import { requireUserId } from "@/lib/current-user";
 import { toAccountDTO } from "@/lib/accounts";
 import type { CategoryDTO, CategoryKindValue } from "@/lib/category-shared";
+import { listCategoryRules } from "@/lib/category-rules";
 import { TransactionForm } from "@/components/transaction-form";
 
 export const dynamic = "force-dynamic";
 
 export default async function NewTransactionPage() {
   const userId = await requireUserId();
-  const [accounts, categories] = await Promise.all([
+  const [accounts, categories, categoryRules] = await Promise.all([
     prisma.account.findMany({
       where: { userId, archived: false },
       include: { loanDetails: true },
@@ -18,6 +19,7 @@ export default async function NewTransactionPage() {
       where: { userId },
       orderBy: [{ kind: "asc" }, { name: "asc" }],
     }),
+    listCategoryRules(prisma, userId),
   ]);
 
   const categoryDTOs: CategoryDTO[] = categories.map((c) => ({
@@ -36,7 +38,11 @@ export default async function NewTransactionPage() {
       {accounts.length === 0 ? (
         <p className="text-muted">Create an account first.</p>
       ) : (
-        <TransactionForm accounts={accounts.map(toAccountDTO)} categories={categoryDTOs} />
+        <TransactionForm
+          accounts={accounts.map(toAccountDTO)}
+          categories={categoryDTOs}
+          categoryRules={categoryRules}
+        />
       )}
     </div>
   );

@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { ACCOUNT_TYPES, LOAN_KINDS } from "@/lib/account-shared";
 import { CATEGORY_KINDS } from "@/lib/category-shared";
+import { MAX_RULE_PATTERN_LENGTH } from "@/lib/category-rule-shared";
 import { FREQUENCIES, PAYMENT_METHODS } from "@/lib/budget-shared";
 import { MAX_BUDGET_START_DAY, MIN_BUDGET_START_DAY } from "@/lib/period";
 
@@ -61,6 +62,11 @@ export const transactionInput = z.object({
   vendorName: z.string().trim().max(200).nullish(),
   description: z.string().trim().max(500).nullish(),
   notes: z.string().trim().max(2000).nullish(),
+  // "Remember this category": future transactions whose vendor or description
+  // contains `pattern` get `categoryId` automatically. Ignored without a category.
+  rememberCategory: z
+    .object({ pattern: z.string().trim().min(1).max(MAX_RULE_PATTERN_LENGTH) })
+    .nullish(),
 });
 
 export type TransactionInput = z.infer<typeof transactionInput>;
@@ -201,3 +207,8 @@ export const apiTokenInput = z.object({
 });
 
 export type ApiTokenInput = z.infer<typeof apiTokenInput>;
+
+export const categoryRuleInput = z.object({
+  pattern: z.string().trim().min(1).max(MAX_RULE_PATTERN_LENGTH),
+  categoryId: z.string().min(1),
+});

@@ -3,6 +3,7 @@ import PostalMime from "postal-mime";
 import { prisma } from "@/lib/prisma";
 import { Prisma, type RawEmail } from "@/generated/prisma/client";
 import { upsertVendor } from "@/lib/transactions";
+import { autoCategorize } from "@/lib/category-rules";
 import { majorToMinor } from "@/lib/money";
 
 export type ParsedMime = {
@@ -190,14 +191,24 @@ export async function applyParserRules(email: RawEmail): Promise<ParseOutcome> {
     const { amountMinor, direction, occurredAt, merchant } = result;
     const signed = direction === "outflow" ? -BigInt(amountMinor) : BigInt(amountMinor);
     const transaction = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
-      const vendorId = await upsertVendor(tx, email.userId!, merchant, null);
+      const description = merchant ?? email.subject;
+      // A remembered "looks like this → category" rule files it on arrival;
+      // it still waits in Review for confirmation like any parsed email.
+      const categoryId = await autoCategorize(
+        tx,
+        email.userId!,
+        [merchant, description],
+        direction === "outflow" ? "out" : "in"
+      );
+      const vendorId = await upsertVendor(tx, email.userId!, merchant, categoryId);
       const created = await tx.transaction.create({
         data: {
           accountId: rule.accountId,
           amount: signed,
           occurredAt,
+          categoryId,
           vendorId,
-          description: merchant ?? email.subject,
+          description,
           source: "email",
           status: "pending_review",
           rawEmailId: email.id,

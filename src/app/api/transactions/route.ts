@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { transactionInput } from "@/lib/validation";
 import { toTransactionDTO, upsertVendor, signedMinorAmount } from "@/lib/transactions";
 import { recomputeBalance } from "@/lib/accounts";
+import { rememberCategory } from "@/lib/category-rules";
 import { ownsCategory } from "@/lib/ownership";
 
 const INCLUDE = { account: true, category: true, vendor: true } as const;
@@ -65,9 +66,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Invalid date" }, { status: 400 });
   }
 
-  const created = await prisma.$transaction(async (tx) => {
+  const { created, remembered } = await prisma.$transaction(async (tx) => {
     const vendorId = await upsertVendor(tx, userId, data.vendorName, data.categoryId ?? null);
-    return tx.transaction.create({
+    const remembered =
+      data.categoryId && data.rememberCategory
+        ? await rememberCategory(tx, userId, data.rememberCategory.pattern, data.categoryId)
+        : null;
+    const created = await tx.transaction.create({
       data: {
         accountId: data.accountId,
         amount: signedMinorAmount(data),
@@ -81,8 +86,12 @@ export async function POST(req: NextRequest) {
       },
       include: INCLUDE,
     });
+    return { created, remembered };
   });
   await recomputeBalance(data.accountId);
 
-  return NextResponse.json({ transaction: toTransactionDTO(created) }, { status: 201 });
+  return NextResponse.json(
+    { transaction: toTransactionDTO(created), rememberedRule: remembered },
+    { status: 201 }
+  );
 }

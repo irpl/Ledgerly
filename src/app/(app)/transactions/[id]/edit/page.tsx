@@ -6,6 +6,7 @@ import { toTransactionDTO } from "@/lib/transactions";
 import { formatMoney, amountClass } from "@/lib/money";
 import { localDate } from "@/lib/dates";
 import type { CategoryDTO, CategoryKindValue } from "@/lib/category-shared";
+import { listCategoryRules } from "@/lib/category-rules";
 import { TransactionForm } from "@/components/transaction-form";
 import { DeleteTransactionButton } from "@/components/delete-transaction-button";
 
@@ -16,7 +17,7 @@ export default async function EditTransactionPage(props: {
 }) {
   const userId = await requireUserId();
   const { id } = await props.params;
-  const [transaction, accounts, categories] = await Promise.all([
+  const [transaction, accounts, categories, categoryRules] = await Promise.all([
     prisma.transaction.findFirst({
       where: { id, account: { userId } },
       include: { account: true, category: true, vendor: true },
@@ -30,6 +31,7 @@ export default async function EditTransactionPage(props: {
       where: { userId },
       orderBy: [{ kind: "asc" }, { name: "asc" }],
     }),
+    listCategoryRules(prisma, userId),
   ]);
   if (!transaction) notFound();
 
@@ -88,6 +90,7 @@ export default async function EditTransactionPage(props: {
       <TransactionForm
         accounts={accounts.map(toAccountDTO)}
         categories={categoryDTOs}
+        categoryRules={categoryRules}
         transaction={toTransactionDTO(transaction)}
       />
     </div>
