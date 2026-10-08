@@ -36,6 +36,7 @@ export const TOOLS: McpTool[] = [
   categories.updateCategory,
   categories.deleteCategory,
   categories.listVendors,
+  categories.listCategoryRules,
 
   // Budget & income plan
   budget.listBudgetLines,

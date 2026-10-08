@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { Check, Trash2, RefreshCw, EyeOff, Plus, Pencil, ChevronDown } from "lucide-react";
 import type { AccountDTO } from "@/lib/account-shared";
 import type { TransactionDTO } from "@/lib/transaction-shared";
+import type { CategoryDTO } from "@/lib/category-shared";
+import { kindFitsDirection, type CategoryRuleDTO } from "@/lib/category-rule-shared";
+import { RememberCategoryPrompt, useRememberCategory } from "@/components/remember-category";
 import { formatMoney, amountClass } from "@/lib/money";
 import { localDate } from "@/lib/dates";
 import { ParserRuleForm } from "@/components/parser-rule-form";
@@ -37,14 +40,55 @@ export type RuleItem = {
   parsedEmails: number;
 };
 
-function PendingRow({ item, onChanged }: { item: PendingItem; onChanged: () => void }) {
+function PendingRow({
+  item,
+  categories,
+  categoryRules,
+  onChanged,
+}: {
+  item: PendingItem;
+  categories: CategoryDTO[];
+  categoryRules: CategoryRuleDTO[];
+  onChanged: () => void;
+}) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  // Follows the item (a rule saved on another row can file this one) until
+  // the user picks something here.
+  const [pickedCategoryId, setPickedCategoryId] = useState<string | null>(null);
+  const categoryId = pickedCategoryId ?? item.categoryId ?? "";
+  const direction = item.amount < 0 ? "out" : "in";
+  const visibleCategories = categories.filter((c) => kindFitsDirection(c.kind, direction));
+  const remember = useRememberCategory({
+    rules: categoryRules,
+    categories,
+    categoryId,
+    vendorName: item.vendorName,
+    description: item.description,
+    direction,
+  });
 
   async function confirm() {
+    if (remember.invalid) {
+      setError("Enter the text to match, or untick “Remember”.");
+      return;
+    }
     setBusy(true);
-    const res = await fetch(`/api/transactions/${item.id}/confirm`, { method: "POST" });
+    setError(null);
+    const res = await fetch(`/api/transactions/${item.id}/confirm`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        categoryId: categoryId || null,
+        rememberCategory: remember.payload,
+      }),
+    });
     setBusy(false);
     if (res.ok) onChanged();
+    else {
+      const data = await res.json().catch(() => null);
+      setError(data?.error ?? "Confirming failed.");
+    }
   }
 
   async function discard() {
@@ -64,7 +108,6 @@ function PendingRow({ item, onChanged }: { item: PendingItem; onChanged: () => v
           </div>
           <div className="text-xs text-muted truncate">
             {item.accountName} · {localDate(item.occurredAt)}
-            {item.categoryName ? ` · ${item.categoryName}` : " · uncategorized"}
           </div>
           {item.email && (
             <div className="text-xs text-muted truncate mt-0.5">
@@ -76,6 +119,26 @@ function PendingRow({ item, onChanged }: { item: PendingItem; onChanged: () => v
           {formatMoney(item.amount, item.accountCurrency, { sign: true })}
         </div>
       </div>
+      <div className="max-w-sm">
+        <label htmlFor={`pending-${item.id}-category`} className="sr-only">
+          Category
+        </label>
+        <select
+          id={`pending-${item.id}-category`}
+          value={categoryId}
+          onChange={(e) => setPickedCategoryId(e.target.value)}
+          className="input py-1.5! text-sm"
+        >
+          <option value="">— uncategorized —</option>
+          {visibleCategories.map((c) => (
+            <option key={c.id} value={c.id}>
+              {c.name}
+            </option>
+          ))}
+        </select>
+      </div>
+      <RememberCategoryPrompt state={remember} idPrefix={`pending-${item.id}`} compact />
+      {error && <p className="text-xs text-negative">{error}</p>}
       <div className="flex gap-2">
         <button onClick={confirm} disabled={busy} className="btn-primary px-3! py-1.5! text-xs">
           <Check size={14} aria-hidden />
@@ -345,11 +408,15 @@ export function ReviewQueue({
   unmatchedEmails,
   rules,
   accounts,
+  categories,
+  categoryRules,
 }: {
   pending: PendingItem[];
   unmatchedEmails: UnmatchedEmail[];
   rules: RuleItem[];
   accounts: AccountDTO[];
+  categories: CategoryDTO[];
+  categoryRules: CategoryRuleDTO[];
 }) {
   const router = useRouter();
   const [showRuleForm, setShowRuleForm] = useState(false);
@@ -366,7 +433,13 @@ export function ReviewQueue({
         ) : (
           <ul className="card p-0! divide-y divide-border-subtle">
             {pending.map((item) => (
-              <PendingRow key={item.id} item={item} onChanged={refresh} />
+              <PendingRow
+                key={item.id}
+                item={item}
+                categories={categories}
+                categoryRules={categoryRules}
+                onChanged={refresh}
+              />
             ))}
           </ul>
         )}

@@ -212,3 +212,11 @@ export const categoryRuleInput = z.object({
   pattern: z.string().trim().min(1).max(MAX_RULE_PATTERN_LENGTH),
   categoryId: z.string().min(1),
 });
+
+export const confirmInput = z.object({
+  // undefined keeps the current category, null clears it.
+  categoryId: z.string().nullish(),
+  rememberCategory: z
+    .object({ pattern: z.string().trim().min(1).max(MAX_RULE_PATTERN_LENGTH) })
+    .nullish(),
+});

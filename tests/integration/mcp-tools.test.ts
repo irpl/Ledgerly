@@ -381,3 +381,105 @@ describe("MCP tools: profile", () => {
     expect(new Date(period.start).getDate()).toBe(25);
   });
 });
+
+describe("MCP tools: remembered categories", () => {
+  beforeEach(resetDb);
+  afterAll(() => prisma.$disconnect());
+
+  async function setup() {
+    const ctx = await contextFor();
+    const account = await ok(ctx, "create_account", { name: "NCB", type: "checking", openingBalance: 0 });
+    const accountId = (account.account as { id: string }).id;
+    const groceries = await prisma.category.create({
+      data: { userId: ctx.userId, name: "Groceries", kind: "expense" },
+    });
+    return { ctx, accountId, groceries };
+  }
+
+  it("saves a rule from update_transaction and files pending look-alikes", async () => {
+    const { ctx, accountId, groceries } = await setup();
+    const pending = await prisma.transaction.create({
+      data: {
+        accountId,
+        amount: -90000n,
+        occurredAt: new Date(),
+        source: "email",
+        status: "pending_review",
+        description: "HI-LO LIGUANEA",
+      },
+    });
+    const created = await ok(ctx, "create_transaction", {
+      accountId,
+      amount: 100,
+      direction: "out",
+      occurredAt: TODAY,
+      vendorName: "HI-LO PORTMORE",
+      categoryId: null,
+    });
+    const id = (created.transaction as { id: string }).id;
+
+    const updated = await ok(ctx, "update_transaction", {
+      transactionId: id,
+      categoryId: groceries.id,
+      rememberPattern: "Hi-Lo",
+    });
+    expect(updated.rememberedRule).toMatchObject({ applied: 1 });
+    const fresh = await prisma.transaction.findUniqueOrThrow({ where: { id: pending.id } });
+    expect(fresh.categoryId).toBe(groceries.id);
+
+    const rules = await ok(ctx, "list_category_rules");
+    expect(rules.rules).toMatchObject([{ pattern: "hi-lo", categoryName: "Groceries" }]);
+  });
+
+  it("applies rules to create_transaction unless categoryId is null", async () => {
+    const { ctx, accountId, groceries } = await setup();
+    await prisma.categoryRule.create({
+      data: { userId: ctx.userId, pattern: "hi-lo", categoryId: groceries.id },
+    });
+
+    const auto = await ok(ctx, "create_transaction", {
+      accountId,
+      amount: 50,
+      direction: "out",
+      occurredAt: TODAY,
+      vendorName: "Hi-Lo Portmore",
+    });
+    expect(auto.autoCategorized).toBe(true);
+    expect(auto.transaction).toMatchObject({ categoryId: groceries.id });
+
+    const optedOut = await ok(ctx, "create_transaction", {
+      accountId,
+      amount: 50,
+      direction: "out",
+      occurredAt: TODAY,
+      vendorName: "Hi-Lo Portmore",
+      categoryId: null,
+    });
+    expect(optedOut.autoCategorized).toBe(false);
+    expect(optedOut.transaction).toMatchObject({ categoryId: null });
+
+    // An expense rule never files money coming in.
+    const refund = await ok(ctx, "create_transaction", {
+      accountId,
+      amount: 50,
+      direction: "in",
+      occurredAt: TODAY,
+      vendorName: "Hi-Lo Portmore",
+    });
+    expect(refund.autoCategorized).toBe(false);
+  });
+
+  it("refuses rememberPattern without a category", async () => {
+    const { ctx, accountId } = await setup();
+    const outcome = await call(ctx, "create_transaction", {
+      accountId,
+      amount: 50,
+      direction: "out",
+      occurredAt: TODAY,
+      vendorName: "Texaco",
+      rememberPattern: "texaco",
+    });
+    expect(outcome.isError).toBe(true);
+    expect(await prisma.categoryRule.count()).toBe(0);
+  });
+});

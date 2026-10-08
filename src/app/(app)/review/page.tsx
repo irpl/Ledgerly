@@ -10,12 +10,14 @@ import {
 } from "@/components/review-queue";
 import { UnroutedEmails } from "@/components/unrouted-emails";
 import { PARSER_RULE_ORDER } from "@/lib/email-parser";
+import { listCategoryRules } from "@/lib/category-rules";
+import type { CategoryDTO, CategoryKindValue } from "@/lib/category-shared";
 
 export const dynamic = "force-dynamic";
 
 export default async function ReviewPage() {
   const userId = await requireUserId();
-  const [pendingRows, emailRows, ruleRows, accounts] = await Promise.all([
+  const [pendingRows, emailRows, ruleRows, accounts, categoryRows, categoryRules] = await Promise.all([
     prisma.transaction.findMany({
       where: { status: "pending_review", account: { userId } },
       include: { account: true, category: true, vendor: true, rawEmail: true },
@@ -39,6 +41,11 @@ export default async function ReviewPage() {
       include: { loanDetails: true },
       orderBy: { createdAt: "asc" },
     }),
+    prisma.category.findMany({
+      where: { userId },
+      orderBy: [{ kind: "asc" }, { name: "asc" }],
+    }),
+    listCategoryRules(prisma, userId),
   ]);
 
   // Admins also see unrouted emails (no user matched) and can assign them.
@@ -70,6 +77,15 @@ export default async function ReviewPage() {
     parseStatus: e.parseStatus,
     parseError: e.parseError,
   }));
+  const categories: CategoryDTO[] = categoryRows.map((c) => ({
+    id: c.id,
+    name: c.name,
+    kind: c.kind as CategoryKindValue,
+    parentId: c.parentId,
+    color: c.color,
+    icon: c.icon,
+    isDefault: c.isDefault,
+  }));
   const rules: RuleItem[] = ruleRows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -95,6 +111,8 @@ export default async function ReviewPage() {
         unmatchedEmails={unmatchedEmails}
         rules={rules}
         accounts={accounts.map(toAccountDTO)}
+        categories={categories}
+        categoryRules={categoryRules}
       />
       {admin && unroutedRows.length > 0 && (
         <UnroutedEmails

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { CATEGORY_KINDS } from "@/lib/category-shared";
 import { defineTool, ToolError } from "@/lib/mcp/types";
 import { requireCategory } from "@/lib/mcp/shared";
+import { listCategoryRules as loadCategoryRules } from "@/lib/category-rules";
 
 export const listCategories = defineTool({
   name: "list_categories",
@@ -188,4 +189,17 @@ export const listVendors = defineTool({
       })),
     };
   },
+});
+
+export const listCategoryRules = defineTool({
+  name: "list_category_rules",
+  title: "List remembered categories",
+  description:
+    "Rules the user saved with \"Remember this category?\": a transaction whose vendor or description contains " +
+    "`pattern` (case-insensitive) is filed under the category when it arrives by email or is created without a " +
+    "categoryId. The longest matching pattern wins, and a category only applies in the direction its kind " +
+    "allows. Save new ones with `rememberPattern` on create_transaction or update_transaction.",
+  readOnly: true,
+  inputSchema: z.object({}),
+  handler: async (_args, ctx) => ({ rules: await loadCategoryRules(prisma, ctx.userId) }),
 });

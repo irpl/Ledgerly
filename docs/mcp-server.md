@@ -50,14 +50,14 @@ curl -s -X POST https://your-host/api/mcp \
 
 ## 3. What the model can do
 
-37 tools, grouped:
+38 tools, grouped:
 
 | Area | Tools |
 |---|---|
 | Orientation | `get_profile`, `get_financial_overview` |
 | Accounts | `list_accounts`, `get_account`, `create_account`, `update_account`, `set_account_archived` |
 | Transactions | `list_transactions`, `get_transaction`, `create_transaction`, `update_transaction`, `delete_transaction`, `create_transfer` |
-| Categories & vendors | `list_categories`, `create_category`, `update_category`, `delete_category`, `list_vendors` |
+| Categories & vendors | `list_categories`, `create_category`, `update_category`, `delete_category`, `list_vendors`, `list_category_rules` |
 | Budget | `list_budget_lines`, `create_budget_line`, `update_budget_line`, `delete_budget_line`, `get_income_plan`, `add_income_plan_entry`, `update_income_plan_entry`, `delete_income_plan_entry`, `get_budget_vs_actual` |
 | Reporting | `get_liabilities`, `get_balance_history` |
 | Email ingestion | `list_review_queue`, `confirm_transaction`, `reparse_email`, `list_parser_rules`, `create_parser_rule`, `update_parser_rule`, `delete_parser_rule` |
@@ -72,6 +72,12 @@ Things worth knowing when reading the output:
   or loan you owe on has a negative balance.
 - **Per currency, always.** Totals are keyed by currency and never summed across
   currencies — there is no FX conversion (spec §3.1 is still unbuilt).
+- **Remembered categories apply here too.** `create_transaction` without a
+  `categoryId` takes the category from the user's remembered rules when the
+  vendor or description matches (`autoCategorized: true` in the result); pass
+  `categoryId: null` to keep it uncategorized. `rememberPattern` on
+  `create_transaction` / `update_transaction` saves a new rule — the tool
+  description tells the model to use it only when the user agreed.
 - **Transfers are not spending.** `create_transfer` writes both legs, and every
   income/expense rollup excludes them.
 - **Email-sourced transactions arrive `pending_review`** and do not move a

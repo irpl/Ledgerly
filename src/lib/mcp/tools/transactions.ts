@@ -7,6 +7,8 @@ import { recomputeBalance } from "@/lib/accounts";
 import { upsertVendor } from "@/lib/transactions";
 import { minorToMajor } from "@/lib/money";
 import { applyParserRules, lostParseRace } from "@/lib/email-parser";
+import { autoCategorize, rememberCategory } from "@/lib/category-rules";
+import { MAX_RULE_PATTERN_LENGTH } from "@/lib/category-rule-shared";
 import { defineTool, ToolError } from "@/lib/mcp/types";
 import {
   TRANSACTION_INCLUDE,
@@ -18,6 +20,18 @@ import {
 } from "@/lib/mcp/shared";
 
 const DATE_ONLY = /^\d{4}-\d{2}-\d{2}$/;
+
+const rememberPatternArg = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_RULE_PATTERN_LENGTH)
+  .optional()
+  .describe(
+    "Only when the user agreed to remember this choice: later transactions whose vendor or description " +
+      "contains this text (case-insensitive) are filed under the same category automatically. Usually the " +
+      'vendor name, shortened to catch variations ("hi-lo" for "HI-LO PORTMORE #12"). Needs a category.'
+  );
 
 /**
  * `to` is inclusive the way a person means it: "to 2026-09-30" covers that
@@ -188,17 +202,24 @@ export const createTransaction = defineTool({
     "Record one transaction and update the account balance. `amount` is always positive — `direction` carries " +
     'the sign ("out" for spending, "in" for income). To move money between the user\'s own accounts use ' +
     "create_transfer instead, so both sides stay linked. `vendorName` feeds the vendor memory used for " +
-    "autocomplete and default categories.",
+    "autocomplete and default categories. When `categoryId` is omitted, the user's remembered category " +
+    "rules (list_category_rules) pick one if the vendor or description matches; pass null to leave it " +
+    "uncategorized.",
   readOnly: false,
   inputSchema: z.object({
     accountId: z.string(),
     amount: z.number().positive().describe("Positive major units, e.g. 4512.35."),
     direction: z.enum(["out", "in"]),
     occurredAt: z.string().describe("When it happened. YYYY-MM-DD or ISO timestamp."),
-    categoryId: z.string().optional(),
+    categoryId: z
+      .string()
+      .nullable()
+      .optional()
+      .describe("Omit to let remembered category rules decide; null for uncategorized."),
     vendorName: z.string().trim().max(200).optional().describe("Merchant or payer name."),
     description: z.string().trim().max(500).optional(),
     notes: z.string().trim().max(2000).optional(),
+    rememberPattern: rememberPatternArg,
   }),
   handler: async (args, ctx) => {
     await requireAccount(ctx, args.accountId);
@@ -206,19 +227,26 @@ export const createTransaction = defineTool({
     const occurredAt = parseDateArg(args.occurredAt, "occurredAt");
     const amount = toMinor(args.amount);
 
-    const created = await prisma.$transaction(async (tx) => {
-      const vendorId = await upsertVendor(
-        tx,
-        ctx.userId,
-        args.vendorName,
-        args.categoryId ?? null
-      );
-      return tx.transaction.create({
+    const { created, autoCategorized, rememberedRule } = await prisma.$transaction(async (tx) => {
+      const ruleCategoryId =
+        args.categoryId === undefined
+          ? await autoCategorize(tx, ctx.userId, [args.vendorName, args.description], args.direction)
+          : null;
+      const categoryId = args.categoryId ?? ruleCategoryId;
+      if (args.rememberPattern && !categoryId) {
+        throw new ToolError("rememberPattern needs a category: pass categoryId too.");
+      }
+      const rememberedRule =
+        args.rememberPattern && categoryId
+          ? await rememberCategory(tx, ctx.userId, args.rememberPattern, categoryId)
+          : null;
+      const vendorId = await upsertVendor(tx, ctx.userId, args.vendorName, categoryId);
+      const created = await tx.transaction.create({
         data: {
           accountId: args.accountId,
           amount: args.direction === "out" ? -amount : amount,
           occurredAt,
-          categoryId: args.categoryId ?? null,
+          categoryId,
           vendorId,
           description: args.description ?? null,
           notes: args.notes ?? null,
@@ -227,9 +255,14 @@ export const createTransaction = defineTool({
         },
         include: TRANSACTION_INCLUDE,
       });
+      return { created, autoCategorized: ruleCategoryId !== null, rememberedRule };
     });
     await recomputeBalance(args.accountId);
-    return { transaction: transactionView(created) };
+    return {
+      transaction: transactionView(created),
+      autoCategorized,
+      ...(rememberedRule ? { rememberedRule } : {}),
+    };
   },
 });
 
@@ -251,6 +284,7 @@ export const updateTransaction = defineTool({
     vendorName: z.string().trim().max(200).nullable().optional(),
     description: z.string().trim().max(500).nullable().optional(),
     notes: z.string().trim().max(2000).nullable().optional(),
+    rememberPattern: rememberPatternArg,
   }),
   handler: async (args, ctx) => {
     const existing = await prisma.transaction.findFirst({
@@ -269,8 +303,11 @@ export const updateTransaction = defineTool({
     const magnitude = args.amount !== undefined ? toMinor(args.amount) : currentMinor;
     const direction = args.direction ?? (existing.amount < 0n ? "out" : "in");
     const categoryId = args.categoryId !== undefined ? args.categoryId : existing.categoryId;
+    if (args.rememberPattern && !categoryId) {
+      throw new ToolError("rememberPattern needs a category: pass categoryId too.");
+    }
 
-    const updated = await prisma.$transaction(async (tx) => {
+    const { updated, rememberedRule } = await prisma.$transaction(async (tx) => {
       // A blank vendorName clears the link; omitting it leaves the vendor alone.
       const vendorId =
         args.vendorName === undefined
@@ -278,7 +315,7 @@ export const updateTransaction = defineTool({
           : args.vendorName === null
             ? null
             : await upsertVendor(tx, ctx.userId, args.vendorName, categoryId);
-      return tx.transaction.update({
+      const updated = await tx.transaction.update({
         where: { id: existing.id },
         data: {
           accountId: args.accountId,
@@ -293,11 +330,20 @@ export const updateTransaction = defineTool({
         },
         include: TRANSACTION_INCLUDE,
       });
+      // After the update, so this transaction isn't among the pending ones it files.
+      const rememberedRule =
+        args.rememberPattern && categoryId
+          ? await rememberCategory(tx, ctx.userId, args.rememberPattern, categoryId)
+          : null;
+      return { updated, rememberedRule };
     });
 
     await recomputeBalance(updated.accountId);
     if (existing.accountId !== updated.accountId) await recomputeBalance(existing.accountId);
-    return { transaction: transactionView(updated) };
+    return {
+      transaction: transactionView(updated),
+      ...(rememberedRule ? { rememberedRule } : {}),
+    };
   },
 });
 

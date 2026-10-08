@@ -2,16 +2,12 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowDownLeft, ArrowUpRight, BookmarkPlus } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import type { AccountDTO } from "@/lib/account-shared";
 import type { CategoryDTO } from "@/lib/category-shared";
 import type { TransactionDTO, VendorSuggestion } from "@/lib/transaction-shared";
-import {
-  findMatchingRule,
-  MAX_RULE_PATTERN_LENGTH,
-  normalizeMatchText,
-  type CategoryRuleDTO,
-} from "@/lib/category-rule-shared";
+import { findMatchingRule, type CategoryRuleDTO } from "@/lib/category-rule-shared";
+import { RememberCategoryPrompt, useRememberCategory } from "@/components/remember-category";
 import { minorToMajor } from "@/lib/money";
 import { localDate, localInputsToISO, localTime } from "@/lib/dates";
 
@@ -46,10 +42,6 @@ export function TransactionForm({
   const [vendorName, setVendorName] = useState(transaction?.vendorName ?? "");
   const [description, setDescription] = useState(transaction?.description ?? "");
   const [notes, setNotes] = useState(transaction?.notes ?? "");
-  // "Remember this category" prompt. The match text follows the vendor (or
-  // description) until the user edits it, e.g. to shorten it.
-  const [remember, setRemember] = useState(false);
-  const [rememberPattern, setRememberPattern] = useState<string | null>(null);
 
   const [suggestions, setSuggestions] = useState<VendorSuggestion[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -63,17 +55,14 @@ export function TransactionForm({
     direction === "out" ? c.kind !== "income" : c.kind !== "expense"
   );
 
-  // What a remembered rule would file this transaction under, if anything.
-  const matchedRule = findMatchingRule(categoryRules, [vendorName, description], direction);
-  const defaultPattern = normalizeMatchText(vendorName) || normalizeMatchText(description);
-  const effectivePattern = rememberPattern ?? defaultPattern;
-  const selectedCategory = categories.find((c) => c.id === categoryId);
-  // Ask only when the choice isn't already remembered.
-  const offerRemember =
-    !!selectedCategory && !!defaultPattern && matchedRule?.categoryId !== categoryId;
-  const ruleToReplace = offerRemember
-    ? categoryRules.find((r) => r.pattern === normalizeMatchText(effectivePattern))
-    : undefined;
+  const remember = useRememberCategory({
+    rules: categoryRules,
+    categories,
+    categoryId,
+    vendorName,
+    description,
+    direction,
+  });
 
   /** Pre-fill the category from a remembered rule when none is chosen yet. */
   function fillFromRules(texts: string[]) {
@@ -137,8 +126,7 @@ export function TransactionForm({
       setError("Pick an account.");
       return;
     }
-    const saveRule = offerRemember && remember;
-    if (saveRule && !normalizeMatchText(effectivePattern)) {
+    if (remember.invalid) {
       setError("Enter the text to match, or untick “Remember”.");
       return;
     }
@@ -158,7 +146,7 @@ export function TransactionForm({
         vendorName: vendorName || null,
         description: description || null,
         notes: notes || null,
-        rememberCategory: saveRule ? { pattern: effectivePattern } : null,
+        rememberCategory: remember.payload,
       }),
     });
     if (!res.ok) {
@@ -343,49 +331,7 @@ export function TransactionForm({
         </div>
       </div>
 
-      {offerRemember && selectedCategory && (
-        <div className="rounded-lg border border-border-subtle p-3 space-y-3">
-          <label className="flex items-start gap-2.5 cursor-pointer text-sm">
-            <input
-              type="checkbox"
-              checked={remember}
-              onChange={(e) => setRemember(e.target.checked)}
-              className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-accent rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-secondary"
-            />
-            <span>
-              <span className="flex items-center gap-1.5 font-medium">
-                <BookmarkPlus size={15} aria-hidden className="text-accent" />
-                Remember this category?
-              </span>
-              <span className="block text-xs text-muted mt-0.5">
-                Transactions that come in later looking like this will be filed under{" "}
-                <span className="text-foreground">{selectedCategory.name}</span> automatically.
-                {ruleToReplace &&
-                  ` This replaces the rule that files them under ${ruleToReplace.categoryName}.`}
-              </span>
-            </span>
-          </label>
-          {remember && (
-            <div>
-              <label htmlFor="txn-remember-pattern" className="label">
-                Match when the vendor or description contains
-              </label>
-              <input
-                id="txn-remember-pattern"
-                value={effectivePattern}
-                onChange={(e) => setRememberPattern(e.target.value)}
-                maxLength={MAX_RULE_PATTERN_LENGTH}
-                className="input amount"
-                autoComplete="off"
-              />
-              <p className="text-xs text-muted mt-1">
-                Not case-sensitive. Shorten it to catch variations — e.g. “hi-lo” also
-                matches “HI-LO PORTMORE #12”.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+      <RememberCategoryPrompt state={remember} idPrefix="txn" />
 
       <div>
         <label htmlFor="txn-description" className="label">
